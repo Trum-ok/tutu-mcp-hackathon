@@ -61,8 +61,14 @@ viewer-demo: demo-traces
 docs:
 	uv run python tutu.py docs
 
+# The eval run baked into the published trace viewer. A committed snapshot of a
+# real run, because CI has no OpenAI key and no upstream access: building the
+# showcase from demo traces instead meant the published viewer showed three
+# hand-written traces out of the set's twenty-two.
+EVAL_SNAPSHOT ?= evals/runs/2026-08-21-gpt-5.6-luna.json
+
 # docs + trace viewer, both landing in site/ — mirrors the Pages build, so the
 # "Открыть трейс-вьювер" link on the docs page resolves locally too
-site: demo-traces
+site:
 	uv run python tutu.py docs
-	uv run python tutu.py viewer --data out/eval-results.demo.json --out site/trace-viewer.html
+	uv run python tutu.py viewer --data $(EVAL_SNAPSHOT) --out site/trace-viewer.html

@@ -18,11 +18,12 @@ Compacting/grounding MCP-прокси перед [`mcp.tutu.ru`](https://mcp.tut
 - **`check_groundedness`.** Детерминированно сверяет черновик ответа с `tool_result`, на
   которые он опирается — вытаскивает из текста цены/время/номера поездов-рейсов/ссылки и
   проверяет их фактическое присутствие в JSON, без LLM-судьи (`tutu_mcp/groundedness.py`).
-- **Empty-result note.** The article's most-cited failure is an agent reading an empty filtered
-  search as "этот поезд не ходит", when the tool only ever returned what is *on sale*. Tutu's own
-  `meta.post_filter_dropped_*` counters say which filter emptied the list — the proxy turns them
-  into a sentence attached to the result (`_empty_result_note`), so the agent can state a fact
-  instead of guessing at a timetable it was never given (see `tutu_mcp/proxy/empty_results.py`).
+- **Пояснение к пустой выдаче.** Самый частый провал: агент читает пустой отфильтрованный
+  поиск как «этот поезд не ходит», хотя инструмент возвращал только то, что *есть в продаже*.
+  Счётчики самого Туту `meta.post_filter_dropped_*` говорят, какой фильтр опустошил список —
+  прокси разворачивает их в предложение и прикладывает к результату (`_empty_result_note`),
+  чтобы агент назвал факт вместо догадки о расписании, которого ему не давали
+  (`tutu_mcp/proxy/empty_results.py`).
 - **Premise gate + `assess_request`.** `check_groundedness` проверяет ВЫХОД хода, это —
   ВХОД: значение, сужающее поиск, обязано прийти от пользователя или из прошлого
   `tool_result`. Придуманный агентом фильтр (классика: молча предположить время окончания
@@ -50,10 +51,12 @@ tutu_mcp/                  сам прокси — это то, что подн�
   proxy/dispatch.py        единый пайплайн tools/call — общий для сервера и proxy-варианта эвалов
   proxy/surface.py         свои тулы прокси (assess_request, check_groundedness) + сборка каталога
   proxy/compact_tools.py   урезание описаний + сплайсинг проза-в-результат
+  proxy/empty_results.py   объясняет пустую выдачу счётчиками post_filter_dropped_*
   proxy/server.py          сборка MCPServer прокси (tools/list, tools/call, check_groundedness)
   groundedness.py          извлечение утверждений + проверка обоснованности
   premises.py              premise gate: происхождение значений, детектор опечаток, assess_request
   toolspec.py              Pydantic -> дескрипторы tools/list для своих тулов
+  text.py                  поиск значения по границам слова — общий для гейта и groundedness
   config.py                настройки TUTU_*; читает .env при импорте
   main.py                  точка входа
 evals/                     харнесс, который измеряет прокси — импортирует его, не наоборот
@@ -69,6 +72,7 @@ evals/                     харнесс, который измеряет пр�
   tokens.py                подсчёт токенов (точный через API либо офлайн через tiktoken)
   measure.py               воспроизводимый подсчёт байт каталога — источник цифр в этом README
   run.py                   один прогон целиком: агент + счётчик + поверхности -> измерение
+  plans.py                 рукописные планы + таблица ожидаемых вердиктов SELF_CHECK
   demo.py                  рукописные трейсы поверх настоящих фикстур, без модели
   config.py                учётные данные OPENAI_* и модель по умолчанию — только для харнесса
 tutu.py                    единая точка входа: serve / evals / record / demo / viewer / docs / measure
@@ -91,7 +95,7 @@ tests/                     pytest, целиком по записанным фи
 `.gitignore`; `.env.example` — шаблон:
 
 ```bash
-cp .env.example .env      # затем впишите OPENAI_API_KEY
+cp .env.example .env      # править не обязательно: ключ нужен только для make evals
 ```
 
 | Переменная                            | Для чего                                                                                  | По умолчанию                |
@@ -270,6 +274,18 @@ chat` — для OpenAI-совместимых шлюзов без `/v1/response
 так далее там, где человек, записывая фикстуру, ничего не пишет) — иначе почти каждый вызов в
 прогоне с моделью промахивался бы мимо записи.
 
+### Снимок прогона в репозитории
+
+`evals/runs/` хранит один настоящий прогон целиком — из него собирается трейс-вьювер на
+GitHub Pages. Так пришлось сделать потому, что у CI нет ни ключа OpenAI, ни доступа к Туту:
+раньше витрина строилась из демо-трейсов и показывала три рукописных сценария из двадцати
+двух. Демо никуда не делось (`make demo-traces`) — оно нужно, чтобы вьювер можно было
+разрабатывать до первого прогона.
+
+Обновить витрину после нового прогона — скопировать отчёт в `evals/runs/` и поправить
+`EVAL_SNAPSHOT` в `Makefile`. Целостность снимка (все сценарии, оба варианта, точный замер,
+совпадение цифр с документацией) проверяет `tests/test_run_snapshot.py`.
+
 ## Трейс-вьювер
 
 ```bash
@@ -321,7 +337,7 @@ make site   # дока + трейс-вьювер вместе в site/, как �
 объяснять заново.)
 
 `tools/list`: 110 164 → 79 411 байт (**−27.9 %**), а с учётом `initialize`-инструкций каждой
-стороны — **−33.1 %** (прокси отдаёт свой блок инструкций на 2,0 КБ вместо 11,2 КБ у Туту).
+стороны — **−33.1 %** (прокси отдаёт свой блок инструкций на 1,9 КБ вместо 11,2 КБ у Туту).
 Обе цифры — уже после добавления двух своих тулов (`assess_request` 1 313 байт,
 `check_groundedness` 1 100).
 
@@ -333,7 +349,7 @@ make site   # дока + трейс-вьювер вместе в site/, как �
 Авторитетная половина схемы — `type`, `enum`, `required`, `format`, имена полей — уходит
 байт-в-байт, это закреплено `test_schema_types_are_never_touched`.
 
-Плата за сжатие названа: `get_rail_instructions` растёт с 27,5 КБ до 50,3 КБ — её платит
+Плата за сжатие названа: `get_rail_instructions` растёт с 26,8 КБ до 50,3 КБ — её платит
 только сессия, которая его вызвала, а не все сессии до первого поиска. `create_checkout_link`
 и `get_offer_details` сохраняют схемную прозу целиком — у них нет парного instructions-тула,
 куда её переложить, а первый к тому же диспетчер покупки.

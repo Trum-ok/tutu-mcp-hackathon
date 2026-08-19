@@ -2,9 +2,9 @@
 #
 # Both are BUILT here rather than committed: `site/` holds only generated
 # artifacts (gitignored), sourced from `pages/` and `viewer/` respectively, so
-# baking them in CI keeps one source of truth. The viewer is built from the
-# hand-written demo traces, which need no model and no API key — a real eval
-# run's `out/eval-results.json` never leaves a laptop.
+# baking them in CI keeps one source of truth. The DATA behind the viewer is the
+# exception — a run needs a model and upstream access, neither of which exists
+# here, so one real run is committed under `evals/runs/` and baked in from there.
 name: pages
 
 on:
@@ -46,15 +46,16 @@ jobs:
       # doesn't mean editing HTML. `tutu.py docs` fills in __DEPLOY_URL__ itself
       # (pages/build.py) — unset (e.g. on a fork), it falls back to the local
       # address, so the page never shows a raw placeholder to a reader.
-      - name: Build the docs page and the trace viewer from demo traces
+      # The viewer is baked from a COMMITTED snapshot of a real eval run
+      # (`evals/runs/`), not from the demo traces: CI has neither an OpenAI key
+      # nor upstream access, and demo traces cover three of the set's twenty-two
+      # scenarios with hand-written answers — a showcase that undersells the run
+      # it is meant to show. `make demo-traces` still exists for working on the
+      # viewer itself before any run exists.
+      - name: Build the docs page and the trace viewer
         env:
           MCP_PUBLIC_URL: ${{ vars.MCP_PUBLIC_URL }}
-        run: |
-          uv run python tutu.py docs
-          uv run python tutu.py demo
-          uv run python tutu.py viewer \
-            --data out/eval-results.demo.json \
-            --out site/trace-viewer.html
+        run: make site
 
       - uses: actions/upload-pages-artifact@v3
         with:
