@@ -1,0 +1,44 @@
+[project]
+name = "tutu-mcp"
+version = "0.1.0"
+description = "..."
+requires-python = ">=3.13"
+authors = [{name = "Артамонов Аркадий", email = "artamarkan@gmail.com"}]
+readme = "README.md"
+dependencies = []
+
+[project.urls]
+Homepage = "https://hackathon2026.tutu.ru"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.3",
+    "ty>=0.0.73",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "N",
+    "RUF",
+    "SIM",
+]
+ignore = [
+    "E501",
+    "B008",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
