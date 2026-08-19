@@ -75,7 +75,31 @@ class FieldPolicy:
     # tools that could close this gap without bothering the user; empty means
     # nothing on this server can, so asking is the only honest move
     resolvable_by: tuple[str, ...] = ()
+    # For a blocking field whose VALUE matters as much as its presence: a pattern
+    # that must match the user's request for the value to count as theirs. Presence
+    # alone was enough before, and an agent that quietly filled in `adults=1` on a
+    # request that never mentioned people sailed through the one gate built to catch
+    # exactly that. Matching the MENTION rather than the value is what keeps this
+    # from over-asking: "на двоих" arrives normalized as `adults=2`, so comparing
+    # the number itself would fail on a perfectly sourced call.
+    mention: re.Pattern[str] | None = None
 
+
+# Ways a Russian request says HOW MANY people are travelling. Word forms, plus the
+# "<number> взрослых / человека / гостя" shapes — never a bare number, which would
+# match a day inside a date ("с 1 по 3 сентября") and pass an invented headcount.
+# Deliberately excludes composition without a count ("для семьи", "с детьми"): those
+# name who is going, not how many, and the hotel price needs the number.
+HEADCOUNT_MENTION = re.compile(
+    r"(?<!\w)(?:"
+    r"один|одного|одна|одному|"
+    r"дво[еи]х?|вдво[её]м|пар[аеы]|парой|"
+    r"тро[еи]х?|втро[её]м|четвер[оы]х?|вчетвером|пятер[оы]х?|"
+    r"\d+\s*(?:взросл\w*|человек\w*|чел\b|гост\w*|персон\w*|пассажир\w*)|"
+    r"на\s+\d+\s*(?:взросл\w*|человек\w*|гост\w*)?"
+    r")",
+    re.IGNORECASE,
+)
 
 _SEARCH_TOOLS = (
     "search_rail",
@@ -160,6 +184,7 @@ POLICIES["search_hotels"] = {
         kind="blocking",
         why="цена отеля — stay_total за номер и гостей, число гостей меняет саму цифру",
         ask="Сколько человек будет жить в номере?",
+        mention=HEADCOUNT_MENTION,
     ),
     "price_max": _COMMON_SEARCH_POLICIES["price_max"],
     "min_rating": FieldPolicy(
@@ -617,14 +642,36 @@ class SessionPremises:
             declared = assume.get(name)
 
             if policy.kind == "blocking":
-                if arguments.get(name) is not None:
-                    # Presence only — the VALUE of a blocking field is deliberately
-                    # not traced back to the user. Both of the fields that matter
-                    # here get normalized on the way in ("на двоих" -> `adults=2`,
-                    # "25 августа" -> `2026-08-25`), so a text match against the
-                    # user's wording would fail on correct calls and produce exactly
-                    # the over-asking this design treats as the worse failure.
-                    # Narrowing fields have no such normalization and are checked.
+                raw = arguments.get(name)
+                if raw is not None:
+                    # Presence is normally enough — a blocking field arrives
+                    # normalized ("на двоих" -> `adults=2`, "25 августа" ->
+                    # `2026-08-25`), so comparing the VALUE to the user's wording
+                    # would fail on correct calls and produce exactly the
+                    # over-asking this design treats as the worse failure.
+                    #
+                    # `policy.mention` is the exception: it asks only whether the
+                    # user brought the quantity up AT ALL. Without it an agent that
+                    # quietly filled in `adults=1` passed the one gate built to
+                    # catch a silently invented headcount. Skipped when the request
+                    # is unknown (no `assess_request` this session) — with nothing
+                    # to read, gating would be a guess.
+                    if policy.mention is None or not self.user_request:
+                        continue
+                    if declared or name in sources or policy.mention.search(self.user_request):
+                        continue
+                    unsettled.append(
+                        Slot(
+                            field=name,
+                            status="unavailable",
+                            why=policy.why,
+                            ask=policy.ask,
+                            value=", ".join(_values_of(raw)),
+                            # Dropping it would not help: upstream would default the
+                            # field just as silently as the agent just did.
+                            resolution="ask_user",
+                        )
+                    )
                     continue
                 if declared:
                     continue

@@ -451,19 +451,60 @@ def test_a_session_stops_gating_after_its_budget_is_spent():
     assert session.preamble()
 
 
-def test_blocking_field_value_is_not_traced_to_the_user_by_design():
-    """Documented limit: "на двоих" normalizes to `adults=2`, so a text match
-    would fail on a CORRECT call. Presence is checked, provenance is not."""
-    session = SessionPremises(user_request="отель в Питере")
-    assert (
-        session.evaluate(
-            "search_hotels",
-            {"check_in": "2026-09-01", "check_out": "2026-09-03", "adults": 2},
-            {},
-            {},
-        )
-        is None
+def _hotel_call(session, adults=2):
+    return session.evaluate(
+        "search_hotels",
+        {"check_in": "2026-09-01", "check_out": "2026-09-03", "adults": adults},
+        {},
+        {},
     )
+
+
+def test_a_headcount_nobody_mentioned_is_gated():
+    """`adults` is the one field where an invented value changes the headline
+    number: the hotel price is a stay total for the room AND its guests. An agent
+    filling in `adults=1` on a request that never mentioned people used to pass."""
+    session = SessionPremises(user_request="Найди отель в Санкт-Петербурге, самый дешёвый")
+    decision = _hotel_call(session, adults=1)
+
+    assert decision is not None
+    slot = next(s for s in decision.slots if s.field == "adults")
+    assert slot.resolution == "ask_user"
+    assert slot.value == "1"
+
+
+@pytest.mark.parametrize(
+    "request_text",
+    [
+        "отель в Питере на двоих",
+        "отель в Питере, поедем вдвоём",
+        "отель в Питере на 2 взрослых",
+    ],
+)
+def test_a_mentioned_headcount_passes_without_a_question(request_text):
+    """The mention is what's checked, never the number: "на двоих" reaches us
+    already normalized to `adults=2`, so matching the value would gate a call
+    that was perfectly sourced — the over-asking this design fears most."""
+    assert _hotel_call(SessionPremises(user_request=request_text)) is None
+
+
+@pytest.mark.parametrize("request_text", ["отель в Питере для семьи", "отель в Питере с детьми"])
+def test_naming_who_is_going_is_not_naming_how_many(request_text):
+    """Composition without a count still leaves the headline price undetermined —
+    a stay total for a family of three is not one for a family of five."""
+    assert _hotel_call(SessionPremises(user_request=request_text)) is not None
+
+
+def test_a_bare_number_in_a_date_is_not_a_headcount():
+    """ "с 1 по 3 сентября" must not source `adults=1`."""
+    session = SessionPremises(user_request="отель в Питере с 1 по 3 сентября")
+    assert _hotel_call(session, adults=1) is not None
+
+
+def test_without_a_known_request_the_headcount_gate_stays_quiet():
+    """No `assess_request` this session means nothing to read the mention from,
+    and gating on absent evidence would just be a guess."""
+    assert _hotel_call(SessionPremises(), adults=1) is None
 
 
 def test_an_invented_filter_is_dropped_not_asked_about():

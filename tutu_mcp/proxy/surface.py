@@ -41,6 +41,7 @@ def _run_check_groundedness(
         # Evidence comes from what this proxy actually delivered, not from what the
         # agent chose to hand back — see the tool's docstring.
         session_payloads=session.result_payloads(),
+        user_request=session.user_request,
     )
 
 
