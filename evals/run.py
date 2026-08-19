@@ -37,6 +37,7 @@ from evals.options import (
     check_variants,
 )
 from evals.plans import (
+    FIXTURE_UNREADABLE,
     PLANNED_IDS,
     SELF_CHECK_LABEL,
     SELF_CHECK_OUT,
@@ -53,6 +54,7 @@ from evals.tokens import (
     TokenCounter,
 )
 from evals.variants import build_variants
+from tutu_mcp.backend import BackendError
 from tutu_mcp.backends import backend_for
 from tutu_mcp.config import load_settings
 from tutu_mcp.replay.recording import RecordingBackend
@@ -162,7 +164,11 @@ async def run_evals(opts: EvalOptions) -> int:
     except InvalidEffortError as exc:
         print(exc, file=sys.stderr)
         return 2
-    plans = build_plans(FixtureStore(settings.fixtures_dir)) if self_check else None
+    try:
+        plans = build_plans(FixtureStore(settings.fixtures_dir)) if self_check else None
+    except BackendError as exc:
+        print(f"{FIXTURE_UNREADABLE}\n{exc}", file=sys.stderr)
+        return 2
     agent = build_agent(opts, model, effort, plans=plans)
     counter = build_token_counter(opts, model, has_key=credentials is not None)
 

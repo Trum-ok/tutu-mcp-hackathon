@@ -76,3 +76,33 @@ async def test_error_text_names_the_file_without_leaking_the_host_path(empty_sto
     message = json.loads(result.text)["error"]
     assert "search_rail/a.json" in message
     assert str(empty_store.fixtures_dir) not in message
+
+
+async def test_demo_traces_name_the_unreadable_fixture_instead_of_tracebacking(
+    tmp_path, monkeypatch, capsys
+):
+    """`make demo-traces` строит планы по фикстурам ещё до того, как что-то
+    подключено. На свежем клоне без записей это нормальное состояние, а не сбой
+    харнесса, — и выглядеть оно должно как остальные проверки предусловий."""
+    from evals.demo import run_demo
+
+    monkeypatch.setenv("TUTU_FIXTURES_DIR", str(tmp_path))
+
+    assert await run_demo() == 2
+
+    err = capsys.readouterr().err
+    assert "search_rail/spb_msk_basic.json" in err
+    assert "tutu.py record" in err
+
+
+async def test_the_self_check_reports_a_corrupt_fixture_the_same_way(tmp_path, monkeypatch, capsys):
+    from evals.options import AgentKind, EvalOptions
+    from evals.run import run_evals
+
+    write_scenario(FixtureStore(tmp_path), "{ not json")
+    (tmp_path / "search_rail" / "spb_msk_basic.json").write_text("{ not json", encoding="utf-8")
+    monkeypatch.setenv("TUTU_FIXTURES_DIR", str(tmp_path))
+
+    assert await run_evals(EvalOptions(agent=AgentKind.SCRIPTED)) == 2
+
+    assert "spb_msk_basic.json" in capsys.readouterr().err

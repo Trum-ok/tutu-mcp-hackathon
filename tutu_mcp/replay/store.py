@@ -186,6 +186,28 @@ class FixtureStore:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return path
 
+    def load_payload(self, tool: str, scenario: str) -> Any:
+        """The tool's own JSON body from one recorded scenario, by name.
+
+        A fixture stores the response as a STRING in `result.text`, so reading
+        the payload means a second `json.loads` — and a second way the file can
+        be malformed. Both live here rather than in the caller: a broken
+        recording has to surface as `FixtureCorruptError` on every path that
+        reads it, not only on the replay path through `find_result`.
+        """
+        path = self._tool_dir(tool) / f"{scenario}.json"
+        relative = f"{tool}/{scenario}.json"
+        entry = self._read_json(path)
+        if not isinstance(entry, dict) or not isinstance(entry.get("result"), dict):
+            raise FixtureCorruptError(relative, "missing `result`")
+        text = entry["result"].get("text")
+        if not isinstance(text, str):
+            raise FixtureCorruptError(relative, "missing `result.text`")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise FixtureCorruptError(relative, f"`result.text` is not JSON: {exc}") from exc
+
     def load_scenarios(self, tool: str) -> list[dict[str, Any]]:
         tool_dir = self._tool_dir(tool)
         if not tool_dir.is_dir():

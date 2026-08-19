@@ -14,10 +14,8 @@ The answers are written by hand, never produced by a model — this is not a
 measurement, and both consumers label their output so it cannot be read as one.
 """
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from evals.agent import Plan
 from evals.options import BASELINE, PROXY
@@ -28,6 +26,12 @@ from tutu_mcp.replay.store import FixtureStore
 # `scripted` prefix: that is what the viewer matches to stamp the amber "НЕ ЗАМЕР"
 # badge on a synthetic run.
 SELF_CHECK_LABEL = "scripted:self-check"
+
+# Both consumers build their plans BEFORE anything is connected, and both read the
+# recorded fixtures to do it. A recording that is missing or malformed is a normal
+# state of a fresh clone, not a bug in the harness, so it is reported the way every
+# other precondition here is — one line on stderr and exit 2, never a traceback.
+FIXTURE_UNREADABLE = "Планы строятся по записанным фикстурам, а одну из них прочитать не вышло:"
 
 RAIL_ARGS = {
     "origin": "Санкт-Петербург",
@@ -48,13 +52,8 @@ def ru_money(amount: float) -> str:
     return f"{amount:,.2f}".replace(",", " ").replace(".", ",")
 
 
-def load_fixture(store: FixtureStore, tool: str, scenario: str) -> dict[str, Any]:
-    path = store.fixtures_dir / tool / f"{scenario}.json"
-    return json.loads(json.loads(path.read_text(encoding="utf-8"))["result"]["text"])
-
-
 def build_plans(store: FixtureStore) -> dict[tuple[str, str], Plan]:
-    rail = load_fixture(store, "search_rail", "spb_msk_basic")
+    rail = store.load_payload("search_rail", "spb_msk_basic")
     offer = rail["offers"][0]
     # Written the way a model actually writes money in Russian — narrow space as
     # the thousands separator, comma as the decimal mark — while the payload holds
@@ -65,7 +64,7 @@ def build_plans(store: FixtureStore) -> dict[tuple[str, str], Plan]:
     url = offer["search_results_url"]
     matched = rail["meta"]["total_matched"]
 
-    hotels = load_fixture(store, "search_hotels", "spb_basic")
+    hotels = store.load_payload("search_hotels", "spb_basic")
     hotel = hotels["hotels"][0]
     hotel_name = hotel["name"]
     hotel_price = ru_money(hotel["best_offer"]["price"]["amount"])

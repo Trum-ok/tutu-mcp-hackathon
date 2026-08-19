@@ -146,6 +146,40 @@ def test_the_viewer_says_where_to_get_the_data_instead_of_traceback(tmp_path, ca
     assert "make demo-traces" in capsys.readouterr().err
 
 
+def test_a_broken_data_file_says_so_instead_of_traceback(tmp_path, capsys):
+    data = tmp_path / "eval-results.json"
+    data.write_text('{"agent": "demo", "varian', encoding="utf-8")
+    out = tmp_path / "out.html"
+
+    code = viewer_build.build_viewer(data, out)
+
+    assert code == 2
+    assert "make demo-traces" in capsys.readouterr().err
+    assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"totally": "wrong"},
+        {"agent": "demo:hand-written", "variants": []},
+        {"agent": "demo:hand-written", "variants": [{"variant": "proxy"}]},
+    ],
+    ids=["not-a-report", "no-variants", "variant-without-scenarios"],
+)
+def test_valid_json_of_the_wrong_shape_is_refused_not_baked(tmp_path, capsys, data):
+    """Собранная из такого файла страница открывается и выглядит как пустой
+    прогон: `(0 трейсов, агент: None)` в консоли и пустой список на экране.
+    Ошибка, которая молчит и рисует правдоподобную пустоту, хуже трейсбека."""
+    path = tmp_path / "eval-results.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    out = tmp_path / "out.html"
+
+    assert viewer_build.build_viewer(path, out) == 2
+    assert str(path) in capsys.readouterr().err
+    assert not out.exists()
+
+
 def test_the_docs_page_points_at_the_deployed_server(monkeypatch):
     monkeypatch.setenv("MCP_PUBLIC_URL", "https://example.invalid/mcp")
 

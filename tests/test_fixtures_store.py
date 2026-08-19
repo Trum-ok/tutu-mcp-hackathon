@@ -1,7 +1,13 @@
 import pytest
 
 from tutu_mcp.backend import ToolCallResult
-from tutu_mcp.replay.store import FixtureNotFoundError, FixtureStore, normalize_arguments
+from tutu_mcp.replay.store import (
+    FixtureCorruptError,
+    FixtureMissingError,
+    FixtureNotFoundError,
+    FixtureStore,
+    normalize_arguments,
+)
 
 
 def test_save_and_find_result_roundtrips_on_exact_arguments(tmp_path):
@@ -117,3 +123,43 @@ def test_false_is_not_treated_as_empty():
     """`direct_only=False` is a real answer, not an unset field — conflating them
     would make a filtered search play back an unfiltered recording."""
     assert normalize_arguments({"direct_only": False}) == '{"direct_only": false}'
+
+
+def test_load_payload_returns_the_tool_body_by_scenario_name(tmp_path):
+    store = FixtureStore(tmp_path)
+    store.save_tool_result(
+        "search_rail",
+        "basic",
+        {"origin": "A"},
+        ToolCallResult(text='{"offers": [{"price": 1}]}', is_error=False),
+    )
+
+    assert store.load_payload("search_rail", "basic") == {"offers": [{"price": 1}]}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "{ not json",
+        '{"result": {"txt": "wrong key"}}',
+        '{"result": {"text": "не JSON, а просто текст"}}',
+    ],
+    ids=["invalid-json", "missing-text", "text-is-not-json"],
+)
+def test_load_payload_reports_a_corrupt_fixture_instead_of_raising_json_errors(tmp_path, body):
+    """Тот же класс ошибки, что и на пути воспроизведения: битую запись чинят
+    перезаписью, и сообщение должно называть файл, а не ронять трейсбек в
+    середину `make demo-traces`."""
+    store = FixtureStore(tmp_path)
+    (tmp_path / "search_rail").mkdir()
+    (tmp_path / "search_rail" / "basic.json").write_text(body, encoding="utf-8")
+
+    with pytest.raises(FixtureCorruptError) as excinfo:
+        store.load_payload("search_rail", "basic")
+
+    assert "search_rail/basic.json" in str(excinfo.value)
+
+
+def test_load_payload_of_an_unrecorded_scenario_is_a_gap_not_a_crash(tmp_path):
+    with pytest.raises(FixtureMissingError):
+        FixtureStore(tmp_path).load_payload("search_rail", "never_recorded")

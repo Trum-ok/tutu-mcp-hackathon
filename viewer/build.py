@@ -92,23 +92,63 @@ def bake(data: dict[str, Any], template: str) -> str:
     return template.replace(PLACEHOLDER, payload)
 
 
-def build_viewer(data_path: Path, out: Path) -> int:
-    if not data_path.is_file():
-        print(
-            f"{data_path} не найден.\n"
-            "Сначала соберите данные:\n"
-            "  make evals        — реальный прогон (нужен OPENAI_API_KEY)\n"
-            "  make demo-traces  — демо-трейсы на фикстурах, без модели",
-            file=sys.stderr,
+class RunDataError(Exception):
+    """`--data` указывает на файл, из которого страницу собирать нельзя."""
+
+
+HOW_TO_GET_DATA = (
+    "  make evals        — реальный прогон (нужен OPENAI_API_KEY)\n"
+    "  make demo-traces  — демо-трейсы на фикстурах, без модели"
+)
+
+
+def read_run(path: Path) -> dict[str, Any]:
+    """Читает отчёт прогона и проверяет форму, которую ждёт `app.js`.
+
+    Форму приходится проверять здесь, а не в шаблоне: `bake` вшивает любой
+    валидный JSON, и страница из объекта не той формы собирается без единой
+    ошибки — просто рисует пустой список и печатает `(0 трейсов, агент: None)`.
+    Это читается как «прогон вышел пустым», хотя на самом деле вьюверу дали не
+    тот файл. Проверка «файла нет» рядом ровно про это же: сказать, что не так и
+    чем это чинится, вместо трейсбека или молчаливой пустой страницы.
+    """
+    if not path.is_file():
+        raise RunDataError(f"{path} не найден.\nСначала соберите данные:\n{HOW_TO_GET_DATA}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RunDataError(f"{path} не разбирается как JSON ({exc}).\n{HOW_TO_GET_DATA}") from exc
+    except OSError as exc:
+        raise RunDataError(f"{path} не читается ({exc.strerror or exc}).") from exc
+
+    if not isinstance(data, dict) or not isinstance(data.get("agent"), str):
+        raise RunDataError(
+            f"{path} — не отчёт прогона: ожидался объект с полем `agent`.\n{HOW_TO_GET_DATA}"
         )
+    variants = data.get("variants")
+    if not isinstance(variants, list) or not variants:
+        raise RunDataError(f"{path}: в `variants` пусто — вьюверу нечего рисовать.")
+    for index, variant in enumerate(variants):
+        if not isinstance(variant, dict) or not isinstance(variant.get("scenarios"), list):
+            raise RunDataError(
+                f"{path}: variants[{index}] без списка `scenarios` — файл собран не этой версией "
+                f"харнесса.\n{HOW_TO_GET_DATA}"
+            )
+    return data
+
+
+def build_viewer(data_path: Path, out: Path) -> int:
+    try:
+        data = read_run(data_path)
+    except RunDataError as exc:
+        print(exc, file=sys.stderr)
         return 2
 
-    data = json.loads(data_path.read_text(encoding="utf-8"))
     html = bake(data, TEMPLATE.read_text(encoding="utf-8"))
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
 
-    scenarios = sum(len(v.get("scenarios", [])) for v in data.get("variants", []))
-    print(f"{out}  ({len(html) / 1024:.0f} КБ, {scenarios} трейсов, агент: {data.get('agent')})")
+    scenarios = sum(len(v["scenarios"]) for v in data["variants"])
+    print(f"{out}  ({len(html) / 1024:.0f} КБ, {scenarios} трейсов, агент: {data['agent']})")
     return 0

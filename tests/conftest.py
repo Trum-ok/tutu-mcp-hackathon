@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pytest
@@ -22,8 +21,7 @@ def repo_fixtures() -> FixtureStore:
 
 
 def load_result_payload(tool: str, scenario: str) -> dict:
-    raw = json.loads((REPO_FIXTURES_DIR / tool / f"{scenario}.json").read_text(encoding="utf-8"))
-    return json.loads(raw["result"]["text"])
+    return FixtureStore(REPO_FIXTURES_DIR).load_payload(tool, scenario)
 
 
 @pytest.fixture

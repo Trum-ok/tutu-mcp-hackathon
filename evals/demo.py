@@ -16,16 +16,18 @@ screen for a real eval run.
     uv run python tutu.py demo
 """
 
+import sys
 from pathlib import Path
 from typing import Any
 
 from evals import report as report_mod
 from evals.agent import Plan, ScriptedAgent, by_scenario_and_variant
-from evals.plans import PLANNED_IDS, build_plans
+from evals.plans import FIXTURE_UNREADABLE, PLANNED_IDS, build_plans
 from evals.runner import run_eval
 from evals.scenarios import select
 from evals.tokens import OfflineTokenCounter
 from evals.variants import BASELINE, build_variants
+from tutu_mcp.backend import BackendError
 from tutu_mcp.backends import backend_for
 from tutu_mcp.config import load_settings
 from tutu_mcp.replay.store import FixtureStore
@@ -50,7 +52,11 @@ async def run_demo() -> int:
     store = FixtureStore(settings.fixtures_dir)
 
     scenarios = select(ids=list(PLANNED_IDS))
-    agent = demo_agent(build_plans(store))
+    try:
+        agent = demo_agent(build_plans(store))
+    except BackendError as exc:
+        print(f"{FIXTURE_UNREADABLE}\n{exc}", file=sys.stderr)
+        return 2
 
     # Hard-wired to the mock: these traces exist to be reproducible on a laptop
     # with no key and no network, so `TUTU_PROXY_MODE=live` must not reach them.
