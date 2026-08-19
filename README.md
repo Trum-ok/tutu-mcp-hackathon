@@ -1,263 +1,278 @@
 # tutu-mcp-proxy
 
 [![lint](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/lint.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/lint.yaml)
+[![lint-pages](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/lint-pages.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/lint-pages.yaml)
 [![tests](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/tests.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/tests.yaml)
 [![pages](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/pages.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/pages.yaml)
 
-Compacting/grounding MCP proxy in front of [`mcp.tutu.ru`](https://mcp.tutu.ru/mcp), built for
-Tutu's hackathon (track 2 — "оптимизация инструментов"). Same 16 tools, same behavior, plus:
+Compacting/grounding MCP-прокси перед [`mcp.tutu.ru`](https://mcp.tutu.ru/mcp), сделан для
+хакатона Туту (трек 2 — «оптимизация инструментов»). Те же 16 инструментов, то же поведение,
+плюс:
 
-- **Trimmed always-on tool catalog.** `tools/list` on the real server runs ~110 KB / ~30K tokens
-  before an agent has searched anything (measured live 2026-08-19). `search_rail`,
-  `get_rail_seatmap` and `search_hotels` — the biggest offenders — get a short top-level
-  `description` here; the trimmed edge-case prose isn't lost, it's spliced into the *call result*
-  of the matching `get_<domain>_instructions` tool (see `tutu_mcp/proxy/compact_tools.py`), so it's
-  paid only when actually read, the same on-demand principle upstream already applies to those
-  instructions tools. `inputSchema` is left untouched everywhere.
-- **`check_groundedness` tool.** Deterministically checks a drafted answer against the
-  `tool_result` payload(s) it's based on — extracts prices/times/train-or-flight-codes/URLs from
-  the answer text and verifies each is actually present in the JSON, no LLM judge involved (see
-  `tutu_mcp/groundedness.py`).
-- **Premise gate + `assess_request`.** `check_groundedness` checks the *output* of a turn;
-  this checks the *input*. Every value that NARROWS a search must come from the user or from an
-  earlier `tool_result` — there is no third source. A filter the model invented (the classic:
-  silently assuming what time an event ends, then filtering return trains by it) makes the call
-  return `clarification_required` INSTEAD of data, so the confident comparison table cannot be
-  built on it. The agent resolves it by asking the user, by declaring `_sources`, or by declaring
-  `_assume` — and an openly assumed value forces a preamble the answer must OPEN with, which
-  `check_groundedness` then verifies (see `tutu_mcp/premises.py`). Also cross-checks the user's own
-  words against each other: "в субботу 11 октября" when 11.10.2026 is a Sunday is flagged as a
-  likely typo — shown, never silently corrected.
-- **Mock mode.** Replays fixtures recorded from the live server instead of calling it — safe to
-  hammer during eval runs or a demo without touching the hackathon's shared rate limit.
+- **Урезанный всегда-загруженный каталог.** `tools/list` у настоящего сервера — ~108 КБ ещё до
+  первого поиска (`uv run python tutu.py measure`, воспроизводимо из `fixtures/`). Три самых
+  тяжёлых тула (`search_rail`, `get_rail_seatmap`, `search_hotels`) получают короткое
+  top-level `description`; срезанная проза не теряется, а переезжает в *результат вызова*
+  парного `get_<domain>_instructions` (`tutu_mcp/proxy/compact_tools.py`) — оплачивается только
+  той сессией, которая его реально читает. `inputSchema` нигде не тронут.
+- **`check_groundedness`.** Детерминированно сверяет черновик ответа с `tool_result`, на
+  которые он опирается — вытаскивает из текста цены/время/номера поездов-рейсов/ссылки и
+  проверяет их фактическое присутствие в JSON, без LLM-судьи (`tutu_mcp/groundedness.py`).
+- **Premise gate + `assess_request`.** `check_groundedness` проверяет ВЫХОД хода, это —
+  ВХОД: значение, сужающее поиск, обязано прийти от пользователя или из прошлого
+  `tool_result`. Придуманный агентом фильтр (классика: молча предположить время окончания
+  события и отфильтровать им обратные рейсы) получает `clarification_required` вместо данных
+  (`tutu_mcp/premises.py`).
+- **Mock-режим.** Отвечает записанными фикстурами вместо живого сервера — можно гонять как
+  угодно часто, не трогая общий рейт-лимит хакатона.
 
-## Layout
+Подробный пользовательский разбор — на отдельной странице: `make docs` собирает
+`site/index.html` (см. [«Пользовательская дока»](#пользовательская-дока) ниже) либо открывайте
+уже опубликованную версию через GitHub Pages. Сырые замеры и мотивирующий кейс — в
+[`docs/findings.md`](docs/findings.md).
+
+## Структура
 
 ```
-tutu_mcp/                  the proxy server itself — this is what `make run-mock` starts
-  backend.py               ToolBackend protocol shared by the live and mock clients
-  upstream/client.py       live backend — wraps the official `mcp` SDK client
-  replay/store.py          on-disk fixture store (VCR-style: match by tool + exact arguments)
-  replay/mock_client.py    mock backend — serves fixtures/ instead of calling Tutu
-  replay/recording.py      records fixtures/ off the live server while a run proceeds
-  replay/bootstrap.py      the one-shot recording pass that creates fixtures/ in the first place
-  proxy/compact_tools.py   description trimming + appendix splicing
-  proxy/server.py          builds the proxy MCPServer (tools/list, tools/call, check_groundedness)
-  groundedness.py          claim extraction + grounding check, used by proxy/server.py
-  premises.py              premise gate: input-side provenance, typo detection, assess_request
-  toolspec.py              Pydantic -> tools/list descriptors for the tools we add ourselves
-  config.py                TUTU_* runtime settings; loads .env on import
-  main.py                  entrypoint
-evals/                     the harness that measures the proxy — imports it, never the reverse
-  scenarios.py             the scenarios both surfaces are run through
-  variants.py              the two tool surfaces under comparison: baseline vs proxy
-  agent.py                 the agent under test (OpenAI, or a scripted stand-in for CI)
-  runner.py                drives one scenario, collects a transcript
-  checks.py, report.py     per-scenario metrics and the aggregate report
-  tokens.py                token accounting (exact via the API, or offline via tiktoken)
-  run.py                   one run end to end: builds agent + counter + surfaces, then measures
-  demo.py                  hand-written traces over real fixtures (no model needed)
-  config.py                OPENAI_* credentials and model default — harness-only
-tutu.py                    the CLI over both: serve / evals / record / demo / viewer
-viewer/template.html       trace viewer UI; build.py bakes an eval run into it
-fixtures/                  recorded responses (tools/list, instructions, searches, ...)
-tests/                     pytest suite, runs entirely against recorded fixtures (no network)
+tutu_mcp/                  сам прокси — это то, что поднимает `make run-mock`
+  backend.py               протокол ToolBackend, общий для live- и mock-клиента
+  backends.py              единственное место, где выбирается бэкенд по настройкам
+  upstream/client.py       live-бэкенд — обёртка над официальным SDK `mcp`
+  replay/store.py          файловое хранилище фикстур (VCR-стиль: по тулу + точным аргументам)
+  replay/mock_client.py    mock-бэкенд — отвечает из fixtures/ вместо похода в Туту
+  replay/recording.py      записывает fixtures/ с живого сервера по ходу прогона
+  replay/bootstrap.py      драйвер записи фикстур; список вызовов — в evals/fixtures_recipe.py
+  proxy/dispatch.py        единый пайплайн tools/call — общий для сервера и proxy-варианта эвалов
+  proxy/surface.py         свои тулы прокси (assess_request, check_groundedness) + сборка каталога
+  proxy/compact_tools.py   урезание описаний + сплайсинг проза-в-результат
+  proxy/measure.py         воспроизводимый подсчёт байт каталога — источник цифр в этом README
+  proxy/server.py          сборка MCPServer прокси (tools/list, tools/call, check_groundedness)
+  groundedness.py          извлечение утверждений + проверка обоснованности
+  premises.py              premise gate: происхождение значений, детектор опечаток, assess_request
+  toolspec.py              Pydantic -> дескрипторы tools/list для своих тулов
+  config.py                настройки TUTU_*; читает .env при импорте
+  main.py                  точка входа
+evals/                     харнесс, который измеряет прокси — импортирует его, не наоборот
+  options.py               перечисления и опции одного прогона эвалов
+  scenarios.py             сценарии, через которые прогоняются обе поверхности
+  fixtures_recipe.py       список вызовов для `tutu.py record` — те же даты, что в сценариях
+  variants.py               два сравниваемых варианта: baseline и proxy
+  agent.py                 агент под тестом (OpenAI либо скриптованная заглушка для CI)
+  runner.py                прогоняет один сценарий, собирает transcript
+  transcript.py            общая запись одного прогона агента
+  checks.py                детерминированные проверки по сценарию
+  report.py                консольная сводка + JSON для трейс-вьювера
+  tokens.py                подсчёт токенов (точный через API либо офлайн через tiktoken)
+  run.py                   один прогон целиком: агент + счётчик + поверхности -> измерение
+  demo.py                  рукописные трейсы поверх настоящих фикстур, без модели
+  config.py                учётные данные OPENAI_* и модель по умолчанию — только для харнесса
+tutu.py                    единая точка входа: serve / evals / record / demo / viewer / docs / measure
+viewer/                    UI трейс-вьювера: template.html + styles.css + app.js + fonts/
+  tokens.css               шрифты и цветовые токены, общие с pages/styles.css
+  build.py                 запекает прогон эвалов и ассеты в один самодостаточный файл
+pages/                     пользовательская дока: тот же паттерн сборки, что у вьювера
+  build.py                 запекает pages/template.html + styles.css + app.js в site/index.html
+site/                      только генерируется — дока и трейс-вьювер, публикуются на Pages
+docs/findings.md           сырые замеры и мотивирующий кейс, датировано и привязано к версии сервера
+fixtures/                  записанные ответы (tools/list, инструкции, поиски, ...)
+tests/                     pytest, целиком по записанным фикстурам, без сети
 ```
 
-## Configuration
+## Настройка
 
-All settings come from environment variables. `tutu_mcp/config.py` loads a `.env` file from the repo
-root on import — it never overrides what the shell already exports, so an explicit `export` still
-wins. `.env` is gitignored; `.env.example` documents every variable and is the file to copy:
+Все настройки — переменные окружения. `tutu_mcp/config.py` читает `.env` из корня репозитория
+при импорте — и никогда не перекрывает то, что уже экспортировано в шелле. `.env` в
+`.gitignore`; `.env.example` — шаблон:
 
 ```bash
-cp .env.example .env      # then fill in OPENAI_API_KEY
+cp .env.example .env      # затем впишите OPENAI_API_KEY
 ```
 
-| Variable | Needed for | Default |
-|---|---|---|
-| `OPENAI_API_KEY` | **evals only** — the agent under test + exact token counts | — |
-| `OPENAI_MODEL` | default model for evals (`--model` overrides per run) | `gpt-5` |
-| `OPENAI_BASE_URL` | set for an OpenAI-compatible gateway | `https://api.openai.com/v1` |
-| `TUTU_PROXY_MODE` | `mock` (fixtures, no network) or `live` | `mock` |
-| `TUTU_UPSTREAM_URL` | the upstream MCP server | `https://mcp.tutu.ru/mcp` |
-| `TUTU_FIXTURES_DIR` | where recorded fixtures live | `./fixtures` |
-| `TUTU_PROXY_HOST` / `TUTU_PROXY_PORT` | where the proxy listens | `127.0.0.1` / `8800` |
+| Переменная                            | Для чего                                                                                  | По умолчанию                |
+|---------------------------------------|-------------------------------------------------------------------------------------------|-----------------------------|
+| `OPENAI_API_KEY`                      | **только эвалы** — агент под тестом и точный подсчёт токенов                              | —                           |
+| `OPENAI_MODEL`                        | модель по умолчанию для эвалов (`--model` переопределяет)                                 | `gpt-5`                     |
+| `OPENAI_EFFORT`                       | усилие рассуждения по умолчанию (`--effort` переопределяет)                               | своё у модели               |
+| `OPENAI_BASE_URL`                     | для OpenAI-совместимого шлюза                                                             | `https://api.openai.com/v1` |
+| `TUTU_PROXY_MODE`                     | `mock` (фикстуры, без сети) или `live`                                                    | `mock`                      |
+| `TUTU_UPSTREAM_URL`                   | адрес upstream MCP-сервера                                                                | `https://mcp.tutu.ru/mcp`   |
+| `TUTU_UPSTREAM_TIMEOUT_S`             | таймаут одного запроса к живому серверу, секунды                                          | `20`                        |
+| `TUTU_FIXTURES_DIR`                   | где лежат записанные фикстуры                                                             | `./fixtures`                |
+| `TUTU_PROXY_HOST` / `TUTU_PROXY_PORT` | адрес прослушивания                                                                       | `127.0.0.1` / `8800`        |
+| `PORT`                                | фолбэк для PaaS (Render/Railway/Fly/…); `TUTU_PROXY_PORT` в приоритете — см. `Dockerfile` | задаёт платформа            |
 
-**The proxy itself needs no OpenAI key** — only the eval harness does, because that's the part
-that runs a model. `make run-mock`, `make run-live` and the whole test suite work without one.
+**Самому прокси ключ OpenAI не нужен** — только эвал-харнессу, потому что это единственная
+часть, которая запускает модель. `make run-mock`, `make run-live` и весь набор тестов работают
+без ключа. Раннер проверяет наличие ключа до первого запроса и сразу отказывает с инструкцией,
+а не падает по авторизации на середине прогона. Какие модели видит ключ —
+`uv run python tutu.py evals --list-models`.
 
-The runner checks for the key before the first request and refuses up front with instructions,
-rather than dying on an auth error several scenarios into a run that has already spent time and
-(in `--live`) upstream rate limit.
-
-Not sure which model ids the key can reach? `uv run python tutu.py evals --list-models`
-prints them straight from the API — don't guess from documentation.
-
-## Running
+## Запуск
 
 ```bash
 uv sync
-uv run python tutu.py serve            # mock mode (default) — http://127.0.0.1:8800/mcp
-TUTU_PROXY_MODE=live uv run python tutu.py serve   # proxies the real mcp.tutu.ru
+uv run python tutu.py serve            # mock-режим (по умолчанию) — http://127.0.0.1:8800/mcp
+TUTU_PROXY_MODE=live uv run python tutu.py serve   # проксирует настоящий mcp.tutu.ru
 ```
 
-Point any MCP client at `http://127.0.0.1:8800/mcp` (Streamable HTTP, no auth — matches upstream).
+Любой MCP-клиент — на `http://127.0.0.1:8800/mcp` (Streamable HTTP, без авторизации, как у
+upstream).
 
-## Fixtures
+## Фикстуры
 
 ```bash
 uv run python tutu.py record
 ```
 
-Sequential, rate-limit-polite, records `tools/list` + all 6 instructions tools + representative
-search/detail/checkout scenarios per domain (including a couple of edge cases: an unmatched
-`train_numbers` filter, an invalid date). Mock-mode lookups match on the tool name **and** exact
-(normalized) arguments — call a tool with arguments that weren't recorded and you get a clear
-`FixtureNotFoundError` naming what scenarios *are* available, not a silent wrong answer.
+Последовательно, вежливо к рейт-лимиту: записывает `tools/list`, все 6 instructions-тулов и
+представительные сценарии поиск/детали/чекаут по каждому домену (включая пару граничных
+случаев — незнакомый `train_numbers`, невалидную дату). Mock-режим ищет фикстуру по имени тула
+**и** точным (нормализованным) аргументам — вызов с незаписанными аргументами даёт явный
+`FixtureNotFoundError` со списком доступных сценариев, а не тихий неверный ответ.
 
-Known gap: no `429` fixture — deliberately provoking one would burn the shared hackathon rate
-limit for every other team, so that one needs to be hand-authored instead.
+Известный пробел: нет фикстуры на `429` — спровоцировать её означало бы сжечь общий рейт-лимит
+хакатона всем остальным командам, так что эта фикстура должна быть написана вручную.
 
-## Evals — baseline vs proxy
-
-```bash
-uv run python tutu.py evals                     # fixtures + real model
-uv run python tutu.py evals --agent scripted    # no model: harness self-check
-uv run python tutu.py evals --live --record-missing  # fill fixture gaps, once
-uv run python tutu.py evals --model <id>        # per-model breakdown
-uv run python tutu.py evals --list-models       # what this key can reach
-```
-
-Runs every scenario in `evals/scenarios.py` through two tool surfaces — `baseline` (raw
-upstream) and `proxy` (compacted + `check_groundedness`) — against the **same** backend, so tool
-results are identical between variants and the only independent variable is the surface itself.
-The proxy variant calls the same functions the live MCP server calls, so this measures the real
-proxy, not a re-implementation of it.
-
-Reported per variant: premise metrics (how often the gate fired, how many runs proceeded on an
-assumption, what share disclosed it up front, and — the guard against turning the assistant into a
-questionnaire — how many clarifying questions were asked on scenarios that had nothing to clarify),
-tool-surface cost in tokens (the number paid on every session before any
-search), task success against per-scenario deterministic checks, pooled groundedness rate, tool
-calls, tool errors, and p50/p95 latency — plus a per-scenario matrix showing exactly where the two
-variants diverge. Full detail lands in `out/eval-results.json` for the trace viewer to render.
-
-Two honesty notes built into the output:
-
-- **Fixture misses are counted separately from tool errors.** A gap in our recording must never
-  read as upstream misbehaving; the report says so explicitly and tells you how to fill it.
-- **Token counts are labelled `~` when estimated.** OpenAI has no token-counting endpoint, so the
-  exact figure comes from one real probe request per variant, reading back `usage.prompt_tokens` —
-  the only way to capture the provider's own tool-serialization overhead. `--estimate-tokens`
-  swaps in a tiktoken count instead; it is a good approximation but still an estimate, so it
-  prints with a `~` rather than a precise-looking number nobody can back up.
-
-Model choice is per run (`--model`, or `OPENAI_MODEL` in `.env`). Reasoning effort is sent only
-when `--effort` is passed, so the model otherwise uses its own default. Sampling parameters are
-never sent: reasoning models reject them, and an eval wants the model's own default behavior.
-
-**Endpoint.** The runner defaults to `/v1/responses`. Chat Completions refuses function tools
-together with reasoning on current reasoning models — it answers *"use /v1/responses or set
-reasoning_effort to 'none'"* — and the second option would quietly measure a reasoning model with
-its reasoning switched off, then attribute the numbers to the model by name. Pass `--api chat`
-for OpenAI-compatible gateways that don't implement `/v1/responses`. The surface-token counter
-follows the same flag, because the two endpoints serialize tool definitions differently and
-counting on one while running on the other would report a cost the run never paid.
-
-**Fixture matching ignores schema defaults.** A model spells out every optional argument —
-`page: 1`, `sort: "price_asc"`, `view: "compact"`, `from_city: null` — where a human recording a
-fixture writes none of them. Upstream treats those as identical requests, so the lookup prunes any
-argument that is `null` or equal to the default declared in the tool's own `inputSchema` (read from
-the recorded `tools/list`, so it can't drift from Tutu's schema). Without this nearly every call in
-a model-driven mock run misses. A value that merely looks default-ish is not pruned: `page_size: 30`
-against a default of `10` is a genuinely different request and correctly stays a miss.
-
-## Trace viewer
+## Эвалы — baseline против proxy
 
 ```bash
-make viewer        # from the last real eval run (out/eval-results.json)
-make viewer-demo   # from hand-written demo traces — no model, no key needed
+uv run python tutu.py evals                     # фикстуры + настоящая модель
+uv run python tutu.py evals --agent scripted    # без модели: самопроверка харнесса
+uv run python tutu.py evals --live --record-missing  # разово дописать недостающие фикстуры
+uv run python tutu.py evals --list-models       # какие модели видит ключ
 ```
 
-Both write `viewer/trace-viewer.html`, a **single self-contained file**: double-click it, no
-server, no network. That is deliberate — the pitch runs on someone's laptop on conference wifi,
-and a page that fetches its data over `file://` would hit CORS and show nothing.
+Прогоняет каждый сценарий из `evals/scenarios.py` через два варианта — `baseline` (сырой
+upstream) и `proxy` (сжатый каталог + `check_groundedness`) — на **одном и том же** бэкенде,
+так что ответы тулов идентичны между вариантами и единственная независимая переменная —
+сама поверхность. Proxy-вариант вызывает те же функции, что и живой MCP-сервер, — измеряется
+настоящий прокси, а не его переописание.
 
-What it shows: the user's request, the agent's answer with every price / time / train-or-flight
-code / URL highlighted by status — green `confirmed`, amber `assumed`, red `unavailable` — the
-per-scenario checks, and every tool call with its arguments and raw response. **Click any
-highlighted value** and a drawer opens showing the exact fragment of the server payload it came
-from, or stating plainly that it appears in none of them.
+В отчёте по каждому варианту: метрики премис (сколько раз сработал гейт, доля прогонов на
+допущении, доля раскрытых допущений, число лишних уточняющих вопросов), стоимость поверхности
+инструментов в токенах, задачный успех по детерминированным проверкам, обоснованность ответов,
+число вызовов/ошибок тулов, латентность p50/p95 — и построчная матрица по сценариям. Полная
+детализация уходит в `out/eval-results.json` для трейс-вьювера.
 
-Three things the UI is careful about:
+Две вещи для честности отчёта: **промахи фикстур считаются отдельно от ошибок тулов** — дыра в
+записи не должна читаться как сбой Туту; и **числа токенов помечены `~`, если это оценка** —
+у OpenAI нет эндпоинта подсчёта токенов, точная цифра берётся из одного реального пробного
+запроса (`usage.prompt_tokens`), `--estimate-tokens` подставляет вместо этого offline-оценку
+tiktoken.
 
-- **Synthetic runs are labelled.** A `demo:` or `scripted:` agent gets an amber `НЕ ЗАМЕР` badge in
-  the header, so hand-written demo traces can never be mistaken on screen for a measurement.
-- **An empty highlight is not a pass.** When an answer contains no typed claims there is nothing to
-  colour, and the panel says so explicitly rather than looking clean — the verdict for those
-  answers comes from the scenario checks, not the highlighting.
-- **`assumed` is not green.** A declared assumption is disclosed, not proven, so it gets its own
-  colour and never counts toward the groundedness rate.
+Модель и усилие рассуждения — за прогон (`--model`/`OPENAI_MODEL`, `--effort`/`OPENAI_EFFORT`);
+без обоих поле `reasoning` вообще не отправляется, и модель применяет своё умолчание — это не
+то же самое, что явное `--effort none`. Раннер по умолчанию бьёт в `/v1/responses` — Chat
+Completions не берёт function tools вместе с рассуждением у текущих reasoning-моделей; `--api
+chat` — для OpenAI-совместимых шлюзов без `/v1/responses`. Сопоставление фикстур игнорирует
+значения по умолчанию из `inputSchema` (модель выписывает `page: 1`, `sort: "price_asc"` и
+так далее там, где человек, записывая фикстуру, ничего не пишет) — иначе почти каждый вызов в
+прогоне с моделью промахивался бы мимо записи.
 
-`make demo-traces` writes `out/eval-results.demo.json`, deliberately *not* `out/eval-results.json`: real
-runs own that path, and two people generating different things into one file overwrite each
-other's work. The demo answers are hand-written over the real recorded fixtures, so every
-"confirmed" claim is genuinely confirmed against real Tutu data and every fabricated one is
-genuinely absent — the highlighting is exercised for real, not faked with hardcoded colours.
+## Трейс-вьювер
 
-## Status
+```bash
+make viewer        # из последнего настоящего прогона эвалов (out/eval-results.json)
+make viewer-demo   # из рукописных демо-трейсов — без модели и без ключа
+```
 
-`tools/list` goes from 108 539 to 78 334 bytes — **27.8%** — and 33.3% counting each side's
-always-on `initialize` instructions, since the proxy replaces Tutu's 11 KB block with its own 1.6 KB one, and that is measured AFTER adding our own two
-tools (`assess_request` 1 309 bytes, `check_groundedness` 755), not before.
+Обе команды пишут `viewer/trace-viewer.html` — один самодостаточный файл: двойной клик, без
+сервера и без сети (питч идёт с чьего-то ноутбука на конференц-вайфае, а страница, тянущая
+данные через `file://`, упрётся в CORS). Исходники разложены на `viewer/template.html` +
+`viewer/styles.css` + `viewer/app.js`, `viewer/build.py` запекает их вместе с данными прогона и
+шрифтами (woff2 Onest/IBM Plex Mono вшиты как `data:` URI — вьювер не ходит в сеть даже за
+шрифтами) в один файл.
 
-Most of that came from the second seam, not the first: top-level tool descriptions were ~14 KB of
-the catalog, while prose inside `inputSchema.properties[].description` was 31.7 KB — 35% of the
-whole thing. Fields keep a short hint (or, when they carry an `enum`, nothing — the permitted
-values already say what the field accepts) and the full sentence moves into the paired
-instructions tool's call result. The authoritative half of every schema — `type`, `enum`,
-`required`, `format`, field names — still goes out byte-identical, which
-`test_schema_types_are_never_touched` pins directly.
+В интерфейсе: режим **обзор** — вся матрица сценариев × вариантов в одной таблице; **только
+провалы** сужает список до упавшего; **бок о бок** ставит один сценарий из обоих вариантов
+рядом, с подсветкой разошедшихся проверок. Клик по любому подсвеченному значению в ответе
+открывает ящик с точным фрагментом ответа сервера, откуда оно взято, — или с прямой
+констатацией, что его нет ни в одном из них. Синтетические прогоны (`demo:`/`scripted:`)
+помечены янтарным бейджем «НЕ ЗАМЕР» — рукописную демонстрацию нельзя перепутать с измерением.
 
-The trade-off is honest and measured: `get_rail_instructions` grows from 26 KB to 49 KB. That is
-paid only by a session that actually calls it, instead of by every session before it has searched
-anything. `create_checkout_link` and `get_offer_details` keep their schema prose in full — neither
-has a paired instructions tool to park it in, and the former is the purchase dispatcher.
+`make demo-traces` пишет `out/eval-results.demo.json`, никогда не `out/eval-results.json`:
+настоящие прогоны владеют этим путём. Демо-ответы написаны поверх настоящих записанных
+фикстур, так что каждое «confirmed» подтверждено реальными данными Туту, а не подставным
+цветом.
 
-Not done, but measured: deferring the tools themselves behind a `find_tools` lookup
-(`notifications/tools/list_changed`) would put the pre-search catalog at 11 702 bytes / 89%. It is
-left out deliberately — a client that ignores the notification would never see the search tools at
-all, which is the first place this proxy would actually break compatibility.
+## Пользовательская дока
 
-This is a scaffold: the mechanism (compaction, appendix splicing, groundedness, premise gate,
-fixtures) is real and tested, but only 3 of 16 tools have hand-tuned compact descriptions so far
-(`search_rail`, `get_rail_seatmap`, `search_hotels` — chosen because they're the biggest and the
-ones the source article calls out by name). `create_checkout_link` is deliberately left alone —
-see the docstring in `tutu_mcp/proxy/compact_tools.py` for why. Extending coverage to the rest of the
-domains, and building the trace-viewer UI on top of `check_groundedness`, are the next steps.
+```bash
+make docs   # site/index.html
+make site   # дока + трейс-вьювер вместе в site/, как в сборке Pages
+```
 
-## Commands
+`pages/build.py` — тот же паттерн сборки, что у вьювера, и переиспользует его ассеты вместо
+копирования: `viewer/tokens.css` (шрифты + светлая «досье»-палитра) и шрифты в `viewer/fonts/`
+— те же, что вшивает трейс-вьювер, так что у двух страниц одна палитра, а не две разъехавшиеся.
+`make docs` достаточно для правки самой страницы; `make site` дополнительно собирает вьювер в
+`site/trace-viewer.html`, чтобы ссылка «Открыть трейс-вьювер» резолвилась и локально — так же,
+как после публикации на GitHub Pages.
+
+## Статус
+
+`uv run python tutu.py measure` печатает все числа этого раздела прямо из
+`fixtures/_meta/tools_list.json` — `tests/test_measure.py` пинует его вывод, так что правка
+`compact_tools.py`/`surface.py`, сдвигающая байты, падает тестом раньше, чем этот раздел молча
+устареет. (`docs/findings.md` отдельно хранит разовый живой замер против настоящего сервера от
+19.08.2026 — это чужая сериализация на проводе, офлайн её byte-в-byte не воспроизвести, поэтому
+она отличается от чисел ниже на пару процентов — ожидаемо, не расхождение, которое нужно
+объяснять заново.)
+
+`tools/list`: 110 164 → 79 411 байт (**−27.9 %**), а с учётом `initialize`-инструкций каждой
+стороны — **−33.1 %** (прокси отдаёт свой блок инструкций на 2,0 КБ вместо 11,2 КБ у Туту).
+Обе цифры — уже после добавления двух своих тулов (`assess_request` 1 313 байт,
+`check_groundedness` 1 100).
+
+Основной вклад — не в первом шве, а во втором: top-level `description` в сумме ~45 КБ на все
+16 тулов (у трёх сжатых здесь — ~33 → ~16 КБ), проза внутри
+`inputSchema.properties[].description` — ~31 КБ, сжимается до ~16 КБ. Поле сохраняет короткую
+подсказку (или ничего, если несёт `enum` — допустимые значения и так говорят, что поле
+принимает), а полное предложение переезжает в результат вызова парного instructions-тула.
+Авторитетная половина схемы — `type`, `enum`, `required`, `format`, имена полей — уходит
+байт-в-байт, это закреплено `test_schema_types_are_never_touched`.
+
+Плата за сжатие названа: `get_rail_instructions` растёт с 27,5 КБ до 50,3 КБ — её платит
+только сессия, которая его вызвала, а не все сессии до первого поиска. `create_checkout_link`
+и `get_offer_details` сохраняют схемную прозу целиком — у них нет парного instructions-тула,
+куда её переложить, а первый к тому же диспетчер покупки.
+
+Измерено, но не сделано: отложенная выдача тулов через `find_tools`
+(`notifications/tools/list_changed`) довела бы каталог до поиска до 11 702 байт (89%), но
+оставлена сознательно — клиент, игнорирующий уведомление, вообще не увидел бы тулы поиска, и
+это первое место, где прокси реально сломал бы совместимость.
+
+Это заготовка: механизм (сжатие, сплайсинг проза-в-результат, groundedness, premise gate,
+фикстуры) настоящий и покрыт тестами, но вручную подобранные компактные описания есть только у
+3 из 16 тулов (`search_rail`, `get_rail_seatmap`, `search_hotels` — самые крупные и те, что
+названы в исходной статье). `create_checkout_link` намеренно не тронут — почему, см. докстринг
+`tutu_mcp/proxy/compact_tools.py`. Расширение покрытия на остальные домены — следующий шаг.
+
+## Команды
 
 ```bash
 make lint          # ruff check + format --check + ty
 make format        # ruff check --fix + format
-make test          # pytest
-make fixtures      # re-record fixtures/ from the live server
-make run-mock      # run the proxy against recorded fixtures
-make run-live      # run the proxy against the real mcp.tutu.ru
-make evals         # baseline vs proxy (needs OPENAI_API_KEY)
-make evals-dry     # same wiring, scripted agent, no credentials needed
-make evals-record  # one live pass that records missing fixtures
-make demo-traces   # hand-written traces over real fixtures, no model
-make viewer        # trace-viewer.html from the last real run
-make viewer-demo   # trace-viewer.html from the demo traces
+make lint-front    # biome ci over viewer/ + pages/ (app.js + styles.css)
+make format-front  # biome check --write over viewer/ + pages/
+make test           # pytest
+make fixtures       # перезаписать fixtures/ с живого сервера
+make run-mock       # прокси на записанных фикстурах
+make run-live       # прокси на настоящем mcp.tutu.ru
+make evals          # baseline против proxy (нужен OPENAI_API_KEY)
+make evals-dry       # та же обвязка, скриптованный агент, без ключей
+make evals-record   # один живой проход, дописывает недостающие фикстуры
+make demo-traces    # рукописные трейсы поверх настоящих фикстур, без модели
+make viewer          # trace-viewer.html из последнего настоящего прогона
+make viewer-demo    # trace-viewer.html из демо-трейсов
+make docs            # site/index.html, пользовательская дока
+make site            # дока + трейс-вьювер вместе в site/
 ```
 
-## Команда
+## Команда rezo
 
-<!-- TODO: заполнить -->
+- **Артамонов Аркадий**     ([@OpSonata](https://t.me/OpSonata))
 
-| | Роль | Контакт |
-|---|---|---|
-| | | |
+## Лицензия
+
+[MIT](LICENSE)
