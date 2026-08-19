@@ -190,3 +190,37 @@ async def test_scenario_with_no_checkable_claims_does_not_score_a_free_pass():
 
     assert not result.success
     assert "all_claims_grounded" in {c.name for c in result.failed_checks}
+
+
+class ExplodingCounter:
+    """An exact counter reaches the provider — so it can fail where nothing else in
+    an offline run can."""
+
+    exact = True
+    estimate_reason = None
+
+    async def count(self, *, tools, system):
+        raise RuntimeError("connection reset")
+
+
+async def test_a_failed_surface_measurement_does_not_take_the_run_down(repo_fixtures, capsys):
+    """The surface probe is one call; the scenarios are the measurement. Losing the
+    probe must cost the surface row and nothing else — `surface` is optional end to
+    end precisely so this can degrade."""
+    variants = await build_variants(
+        MockUpstreamClient(repo_fixtures), repo_fixtures.instructions(), names=[PROXY]
+    )
+    agent = ScriptedAgent(plan={"rail_cheapest": ([("search_rail", RAIL_ARGS)], "ответ")})
+
+    run = await run_eval(
+        agent=agent,
+        scenarios=select(ids=["rail_cheapest"]),
+        variants=variants,
+        token_counter=ExplodingCounter(),
+    )
+
+    summary = run.by_variant(PROXY)
+    assert summary is not None
+    assert summary.surface is None
+    assert summary.total == 1
+    assert "не измерена" in capsys.readouterr().err

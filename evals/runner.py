@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -210,13 +211,29 @@ async def run_eval(
 
     `api` only tells the surface measurement which endpoint's tool serialization to
     size against; the agent already knows which one it calls."""
+    if concurrency < 1:
+        # `asyncio.Semaphore(0)` is a legal semaphore that admits nobody: the run
+        # would wait forever instead of failing. Loud beats hung.
+        raise ValueError(f"concurrency must be >= 1, got {concurrency}")
     semaphore = asyncio.Semaphore(concurrency)
     summaries = []
 
     for variant in variants:
-        surface = await measure_surface(
-            token_counter, variant.name, variant.tools, variant.server_instructions, api
-        )
+        try:
+            surface = await measure_surface(
+                token_counter, variant.name, variant.tools, variant.server_instructions, api
+            )
+        except Exception as exc:
+            # The exact counter calls the provider, so a network blip on this one
+            # probe would otherwise kill a run whose scenarios are all offline.
+            # `surface` is already optional end to end — the console table and the
+            # JSON both skip a variant without it — so degrade instead of dying.
+            surface = None
+            print(
+                f"⚠ поверхность варианта {variant.name} не измерена "
+                f"({type(exc).__name__}: {exc}) — метрики сценариев не затронуты",
+                file=sys.stderr,
+            )
 
         async def guarded(scenario: Scenario, v: Variant = variant) -> ScenarioResult:
             async with semaphore:
