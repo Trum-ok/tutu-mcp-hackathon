@@ -1,14 +1,21 @@
-"""Records real mcp.tutu.ru responses as fixtures for `TUTU_PROXY_MODE=mock`.
+"""Driver that records real mcp.tutu.ru responses as fixtures for `TUTU_PROXY_MODE=mock`.
 
-Run once (or after upstream changes) against the live server:
+Run against the live server (once, or after upstream changes):
 
     uv run python tutu.py record
 
+WHAT to record is not here. The call list is a property of the eval scenarios
+that replay it — same cities, same dates, same argument spelling — so it lives
+in `evals/fixtures_recipe.py`, which may import `evals.scenarios` and therefore
+cannot drift from it. This module only knows how to drive a list of
+`RecordSpec`s: it is the mechanism, `evals/` is the policy. Nothing here may
+import `evals` (see the layering note in `tutu_mcp/config.py`).
+
 Deliberately sequential with a short delay between calls — the hackathon's
-rate limit is shared across every team, so this script is polite by design
-rather than fast. A handful of scenarios chain off an earlier call's
-`details_ref` / `checkout_ref` (seatmap, offer details, checkout links), so
-recording order matters; keep new scenarios in dependency order.
+rate limit is shared across every team, so this driver is polite by design
+rather than fast. Specs are recorded in order and a later one may read an
+earlier one's result (a `details_ref` or `checkout_ref`), which is why
+`arguments` can be a callable.
 
 Known gap: no 429 fixture. Provoking one on purpose would burn the shared
 rate limit for every other team on-site, so that fixture has to be
@@ -17,6 +24,8 @@ hand-authored (or captured incidentally) instead of recorded here.
 
 import asyncio
 import json
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from tutu_mcp.config import load_settings
@@ -24,14 +33,30 @@ from tutu_mcp.replay.store import FixtureStore
 from tutu_mcp.upstream.client import UpstreamClient
 
 DELAY_BETWEEN_CALLS_SECONDS = 0.4
-RAIL_DATE = "2026-08-25"
-HOTEL_CHECK_IN = "2026-09-01"
-HOTEL_CHECK_OUT = "2026-09-03"
+
+Recorded = dict[str, Any]
+ArgumentsFor = Callable[[Recorded], dict[str, Any] | None]
 
 
-async def record(
+@dataclass(frozen=True)
+class RecordSpec:
+    """One call to record, keyed in `Recorded` as `"<tool>/<scenario>"`.
+
+    `arguments` may be a callable when the call depends on an earlier result
+    (a rail `details_ref`, a hotel `checkout_ref`). Returning `None` from it
+    means "the dependency isn't there" — the spec is skipped with a note rather
+    than failing the whole run, because a partial fixture set is still useful.
+    """
+
+    tool: str
+    scenario: str
+    arguments: dict[str, Any] | ArgumentsFor
+    group: str = ""
+
+
+async def record_one(
     store: FixtureStore, client: UpstreamClient, tool: str, scenario: str, arguments: dict[str, Any]
-) -> dict[str, Any] | None:
+) -> Any | None:
     try:
         result = await client.call_tool(tool, arguments)
     except Exception as exc:  # this is a recording script — log and keep going
@@ -51,7 +76,44 @@ async def record(
         return None
 
 
-async def record_fixtures() -> None:
+async def record_catalog(store: FixtureStore, client: UpstreamClient) -> None:
+    """`initialize` + `tools/list` — what every mock run needs before any call."""
+    print("initialize")
+    info = client.server_info()
+    store.save_server_info(info)
+    print(f"  - {info['name']} {info['version']}, instructions {len(info['instructions'])} bytes")
+
+    print("tools/list")
+    tools = await client.list_tools()
+    store.save_tools_list(tools)
+    print(f"  - {len(tools)} tools, {len(json.dumps(tools, ensure_ascii=False))} bytes")
+    await asyncio.sleep(DELAY_BETWEEN_CALLS_SECONDS)
+
+
+async def record_calls(
+    store: FixtureStore, client: UpstreamClient, calls: Iterable[RecordSpec]
+) -> Recorded:
+    """Record each spec in order, returning what every successful call parsed to."""
+    recorded: Recorded = {}
+    group = ""
+    for spec in calls:
+        if spec.group and spec.group != group:
+            group = spec.group
+            print(group)
+
+        spec_arguments = spec.arguments
+        arguments = spec_arguments if isinstance(spec_arguments, dict) else spec_arguments(recorded)
+        if arguments is None:
+            print(f"  ! {spec.tool}/{spec.scenario}: dependency missing, skipped")
+            continue
+
+        payload = await record_one(store, client, spec.tool, spec.scenario, arguments)
+        if payload is not None:
+            recorded[f"{spec.tool}/{spec.scenario}"] = payload
+    return recorded
+
+
+async def record_fixtures(calls: Sequence[RecordSpec]) -> None:
     settings = load_settings()
     store = FixtureStore(settings.fixtures_dir)
 
@@ -59,189 +121,6 @@ async def record_fixtures() -> None:
         settings.upstream_url, timeout_s=settings.upstream_timeout_s
     ) as client:
         print(f"Recording from {settings.upstream_url} into {settings.fixtures_dir}")
-
-        print("initialize")
-        info = client.server_info()
-        store.save_server_info(info)
-        print(
-            f"  - {info['name']} {info['version']}, instructions {len(info['instructions'])} bytes"
-        )
-
-        print("tools/list")
-        tools = await client.list_tools()
-        store.save_tools_list(tools)
-        print(f"  - {len(tools)} tools, {len(json.dumps(tools, ensure_ascii=False))} bytes")
-        await asyncio.sleep(DELAY_BETWEEN_CALLS_SECONDS)
-
-        print("instructions")
-        for domain in ("avia", "rail", "bus", "etrain", "hotels", "multitransport"):
-            await record(store, client, f"get_{domain}_instructions", "default", {})
-
-        print("resources")
-        for uri in ("tutu://help/overview", "tutu://status", "tutu://amenities/dictionary"):
-            scenario = uri.replace("tutu://", "").replace("/", "_")
-            await record(store, client, "fetch_resource", scenario, {"uri": uri})
-
-        print("search_rail")
-        rail_basic = await record(
-            store,
-            client,
-            "search_rail",
-            "spb_msk_basic",
-            {"origin": "Санкт-Петербург", "destination": "Москва", "departure_date": RAIL_DATE},
-        )
-        await record(
-            store,
-            client,
-            "search_rail",
-            "spb_msk_city_alias",
-            {"origin": "Питер", "destination": "Мск", "departure_date": RAIL_DATE},
-        )
-        await record(
-            store,
-            client,
-            "search_rail",
-            "spb_msk_price_max",
-            {
-                "origin": "Санкт-Петербург",
-                "destination": "Москва",
-                "departure_date": RAIL_DATE,
-                "price_max": 3000,
-            },
-        )
-        await record(
-            store,
-            client,
-            "search_rail",
-            "spb_msk_no_such_train",
-            {
-                "origin": "Санкт-Петербург",
-                "destination": "Москва",
-                "departure_date": RAIL_DATE,
-                "train_numbers": ["999999"],
-            },
-        )
-        await record(
-            store,
-            client,
-            "search_rail",
-            "invalid_date",
-            {"origin": "Санкт-Петербург", "destination": "Москва", "departure_date": "not-a-date"},
-        )
-
-        if rail_basic and rail_basic.get("offers"):
-            rail_offer = rail_basic["offers"][0]
-            details_ref = rail_offer["details_ref"]
-            checkout_ref = rail_offer["checkout_ref"]
-
-            print("get_offer_details (rail)")
-            await record(
-                store,
-                client,
-                "get_offer_details",
-                "rail_basic",
-                {"product_type": "rail", "details_ref": details_ref},
-            )
-
-            print("get_rail_seatmap")
-            await record(store, client, "get_rail_seatmap", "basic", {"details_ref": details_ref})
-            await record(
-                store,
-                client,
-                "get_rail_seatmap",
-                "together_2",
-                {"details_ref": details_ref, "task": "together", "seats_together": 2},
-            )
-
-            print("create_checkout_link (rail)")
-            await record(
-                store, client, "create_checkout_link", "rail_seat_page", dict(checkout_ref)
-            )
-        else:
-            print("  ! no rail offers recorded, skipping dependent rail fixtures")
-
-        print("search_avia")
-        await record(
-            store,
-            client,
-            "search_avia",
-            "msk_spb_basic",
-            {"origin": "Москва", "destination": "Санкт-Петербург", "departure_date": RAIL_DATE},
-        )
-
-        print("search_bus")
-        await record(
-            store,
-            client,
-            "search_bus",
-            "msk_spb_basic",
-            {"origin": "Москва", "destination": "Санкт-Петербург", "departure_date": RAIL_DATE},
-        )
-
-        print("search_etrain")
-        await record(
-            store,
-            client,
-            "search_etrain",
-            "msk_mytishchi_basic",
-            {"origin": "Москва", "destination": "Мытищи", "departure_date": RAIL_DATE},
-        )
-
-        print("search_multitransport")
-        await record(
-            store,
-            client,
-            "search_multitransport",
-            "msk_spb_basic",
-            {"origin": "Москва", "destination": "Санкт-Петербург", "departure_date": RAIL_DATE},
-        )
-
-        print("search_hotels")
-        hotels_basic = await record(
-            store,
-            client,
-            "search_hotels",
-            "spb_basic",
-            {
-                "city_name": "Санкт-Петербург",
-                "check_in": HOTEL_CHECK_IN,
-                "check_out": HOTEL_CHECK_OUT,
-                "adults": 2,
-            },
-        )
-
-        if hotels_basic and hotels_basic.get("hotels"):
-            hotel = hotels_basic["hotels"][0]
-            hotel_id = hotel.get("hotel_id") or hotel.get("hotel_geo_id")
-
-            print("get_offer_details (hotel)")
-            await record(
-                store,
-                client,
-                "get_offer_details",
-                "hotel_basic",
-                {
-                    "product_type": "hotels",
-                    "hotel_id": hotel_id,
-                    "check_in": HOTEL_CHECK_IN,
-                    "check_out": HOTEL_CHECK_OUT,
-                    "adults": 2,
-                },
-            )
-
-            checkout_ref = hotel.get("checkout_ref") or hotel.get("best_offer", {}).get(
-                "checkout_ref"
-            )
-            if checkout_ref:
-                print("create_checkout_link (hotel)")
-                await record(
-                    store,
-                    client,
-                    "create_checkout_link",
-                    "hotel_page",
-                    {"product_type": "hotels", **checkout_ref},
-                )
-        else:
-            print("  ! no hotel offers recorded, skipping dependent hotel fixtures")
-
+        await record_catalog(store, client)
+        await record_calls(store, client, calls)
         print("Done.")

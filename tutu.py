@@ -121,9 +121,10 @@ def evals(
 @app.command()
 def record() -> None:
     """Record fixtures off the live mcp.tutu.ru (sequential and deliberately polite)."""
+    from evals.fixtures_recipe import FIXTURE_CALLS
     from tutu_mcp.replay.bootstrap import record_fixtures
 
-    anyio.run(record_fixtures)
+    anyio.run(record_fixtures, FIXTURE_CALLS)
 
 
 @app.command()
