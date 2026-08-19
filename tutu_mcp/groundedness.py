@@ -30,7 +30,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from tutu_mcp.backend import ERROR_STATUSES
 from tutu_mcp.toolspec import parse_args, tool_spec
+
+# Our own domain-shaped error results (tutu_mcp.proxy.dispatch.backend_error).
+# A failed call's payload can echo the very value an agent invented (a fixture
+# miss quotes back its unmatched arguments) — treating it as evidence would let
+# that invention "confirm" itself.
+_ERROR_STATUSES = ERROR_STATUSES
 
 _PRICE_RE = re.compile(r"(?<!\d)(\d[\d\s]{0,9}(?:[.,]\d{1,2})?)\s?(₽|руб\.?|RUB)", re.IGNORECASE)
 _URL_RE = re.compile(r"https?://\S+")
@@ -83,6 +90,9 @@ class GroundednessReport:
     # assumptions the premise gate recorded this session, if any
     assumptions: list[str] = field(default_factory=list)
     disclosure_position: int | None = None
+    # tool_results excluded from the grounding index because they were one of
+    # OUR error payloads, not real Tutu data — see `_ERROR_STATUSES`
+    ignored_error_payloads: int = 0
 
     @property
     def assumption_disclosed(self) -> bool | None:
@@ -173,10 +183,16 @@ def _flatten(
         strings.append(payload)
 
 
+def _is_error_payload(payload: Any) -> bool:
+    return isinstance(payload, dict) and payload.get("status") in _ERROR_STATUSES
+
+
 def build_grounding_index(payloads: list[Any]) -> GroundingIndex:
     price_numbers: set[float] = set()
     strings: list[str] = []
     for payload in payloads:
+        if _is_error_payload(payload):
+            continue
         _flatten(payload, price_numbers, strings)
     return GroundingIndex(price_numbers=price_numbers, strings=strings)
 
@@ -217,6 +233,7 @@ def check_groundedness(
     (invented silently) to `assumed` (invented openly) — different failures that
     must not share a color."""
     index = build_grounding_index(tool_results)
+    ignored_error_payloads = sum(1 for p in tool_results if _is_error_payload(p))
     assumed = {v.strip().lower() for v in (assumed_values or set())}
     checks: list[ClaimCheck] = []
     for claim in extract_claims(answer_text):
@@ -242,6 +259,7 @@ def check_groundedness(
         checks=checks,
         assumptions=list(assumptions or []),
         disclosure_position=find_disclosure_position(answer_text),
+        ignored_error_payloads=ignored_error_payloads,
     )
 
 
@@ -261,6 +279,7 @@ def report_to_json(report: GroundednessReport) -> str:
             "assumptions": report.assumptions,
             "assumption_disclosed": report.assumption_disclosed,
             "disclosure_position": report.disclosure_position,
+            "ignored_error_payloads": report.ignored_error_payloads,
         },
         ensure_ascii=False,
     )

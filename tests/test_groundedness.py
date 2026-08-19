@@ -55,3 +55,19 @@ def test_price_claims_only_match_price_tagged_fields_not_unrelated_counts():
     report = check_groundedness("Билет всего за 1 ₽!", [payload])
 
     assert report.checks[0].grounded is False
+
+
+def test_our_own_error_payload_does_not_ground_the_value_it_echoes():
+    # regression: a fixture miss (or any backend_error payload) quotes the
+    # unmatched arguments back — an invented "777A" must not "confirm" itself
+    # just because it also appears in our own error text
+    error_payload = {
+        "status": "fixture_not_found",
+        "tool": "search_rail",
+        "error": "No fixture for search_rail(train_numbers=['777A'], price_max=4000)",
+    }
+
+    report = check_groundedness("Поезд 777A, цена 4000 руб.", [error_payload])
+
+    assert all(not check.grounded for check in report.checks)
+    assert report.ignored_error_payloads == 1

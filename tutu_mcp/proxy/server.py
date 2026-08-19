@@ -1,34 +1,41 @@
 """Builds the proxy MCP server: same tool surface as `mcp.tutu.ru`, with
 compacted always-on descriptions and one extra tool for groundedness checks.
 
-Tool listing/dispatch is wired directly on the low-level `Server` (reached
-via `MCPServer._lowlevel_server`, the same private seam `MCPServer` itself
-uses to bolt on extensions — see its `_install_extension_interceptor`)
-instead of the `@server.tool()` decorator, because that decorator derives
-its JSON schema from a Python function's signature. A proxy needs to pass
+Neither handler can be a plain `@server.tool()`: that decorator derives its
+JSON schema from a Python function's signature, and a proxy needs to pass
 upstream's own arbitrary schema through untouched (or lightly trimmed by
 `compact_tools`), not redeclare ~50 parameters as a Python function. Because
 `on_list_tools`/`on_call_tool` replace MCPServer's own handlers wholesale,
 `check_groundedness` is dispatched here too rather than via `@server.tool()`
 (whose registration the replaced handlers would never see).
+
+`tools/call` is wired through `Extension.intercept_tool_call` — the SDK's
+sanctioned hook for exactly this (`on_call_tool` always short-circuits, so
+the wrapped default handler, which has no tools registered, is never
+reached). `tools/list` has no such public hook: `Extension.tools()` still
+derives its schema from a function signature, and `MethodBinding` explicitly
+refuses to bind spec methods like `tools/list` (see its docstring, which
+points back at this exact seam for that case). So `on_list_tools` is wired
+directly on the low-level `Server`, reached via `MCPServer._lowlevel_server`
+— the same private attribute `MCPServer` itself uses to bolt on extensions.
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+import anyio
 import mcp_types as types
+from mcp.server.context import CallNext, ServerRequestContext
+from mcp.server.extension import Extension
 from mcp.server.mcpserver import MCPServer
+from mcp.shared.exceptions import MCPError
 
-from tutu_mcp.backend import ToolBackend
-from tutu_mcp.groundedness import CHECK_GROUNDEDNESS_TOOL, run_check_groundedness_tool
-from tutu_mcp.premises import (
-    ASSESS_REQUEST_TOOL,
-    SessionPremises,
-    run_assess_request_tool,
-    strip_control_fields,
-)
-from tutu_mcp.replay.store import FixtureNotFoundError
+from tutu_mcp.backend import ToolBackend, call_with_timeout_retry
+from tutu_mcp.premises import SessionPremises
 
-from .compact_tools import apply_compact_overrides, apply_result_appendix
+from .compact_tools import apply_compact_overrides
+from .dispatch import backend_error, dispatch
+from .surface import PROXY_INSTRUCTIONS, proxy_catalog
 
 # Premise state is per MCP session and must never be global: two clients on one
 # proxy would otherwise see each other's assumptions — a data leak on a shared
@@ -37,47 +44,28 @@ MCP_SESSION_HEADER = "mcp-session-id"
 STDIO_SESSION_KEY = "stdio"  # one process, one conversation
 MAX_SESSIONS = 256
 
-PROXY_INSTRUCTIONS = (
-    "Compacted proxy in front of mcp.tutu.ru: identical tools and behavior, but the "
-    "always-on tools/list catalog is trimmed for the biggest offenders (see each "
-    "trimmed tool's description for which get_<domain>_instructions tool absorbed the "
-    "detail — that tool's CALL RESULT carries it, not its tools/list entry). Also "
-    "exposes `check_groundedness` — before answering, pass your drafted answer text "
-    "plus the raw JSON text of every tool_result you used this turn, and it flags any "
-    "price/time/train-or-flight-code/URL in your answer that isn't actually present in "
-    "those results.\n\n"
-    "PREMISE GATE — read before your first search. Every value that NARROWS a search "
-    "must come from the user or from an earlier tool_result; there is no third source. "
-    "Call `assess_request` FIRST with the user's request verbatim (it is local, free and "
-    "instant) — it surfaces which parameters are blocking, flags a date that contradicts "
-    "the weekday the user gave, and lets values the user actually typed pass the gate "
-    "without a retry. When a search argument has no such source, the call returns "
-    "`clarification_required` INSTEAD of data, and you resolve it one of three ways: ask "
-    'the user (preferred), repeat the call with `_sources={"<field>": "user"}` if the '
-    'user did supply it, or repeat with `_assume={"<field>": "<rationale>"}` to proceed '
-    "on an openly declared assumption. In that last case the result carries a preamble your "
-    "answer MUST OPEN with — `check_groundedness` fails an answer that discloses an "
-    "assumption only at the end, or not at all. Both `_sources` and `_assume` are stripped "
-    "before the call reaches Tutu, so no upstream schema changes."
-)
-
-# `CHECK_GROUNDEDNESS_TOOL` is re-exported from `app.groundedness`, where its
-# Pydantic argument model lives next to the function that consumes it.
+_OnCallTool = Callable[
+    [ServerRequestContext[Any, Any], types.CallToolRequestParams], Awaitable[types.CallToolResult]
+]
 
 
-def _run_check_groundedness(
-    arguments: dict[str, Any], session: SessionPremises
-) -> types.CallToolResult:
-    # assumptions come from the session, never from the agent's arguments — an
-    # agent able to omit them could hide them from the check built to expose them
-    text, is_error = run_check_groundedness_tool(
-        arguments,
-        assumed_values=session.assumed_values(),
-        assumptions=session.assumption_lines(),
-    )
-    return types.CallToolResult(
-        content=[types.TextContent(type="text", text=text)], is_error=is_error
-    )
+class _ToolCallDispatch(Extension):
+    """Routes `tools/call` to `build_server`'s `on_call_tool` closure via the
+    SDK's public interception point, instead of another `_lowlevel_server` write.
+    """
+
+    identifier = "ru.tutu/mcp-proxy"
+
+    def __init__(self, on_call_tool: _OnCallTool) -> None:
+        self._on_call_tool = on_call_tool
+
+    async def intercept_tool_call(
+        self,
+        params: types.CallToolRequestParams,
+        ctx: ServerRequestContext[Any, Any],
+        call_next: CallNext,
+    ) -> types.CallToolResult:
+        return await self._on_call_tool(ctx, params)
 
 
 def _session_key(ctx: Any) -> str:
@@ -86,16 +74,19 @@ def _session_key(ctx: Any) -> str:
     Streamable HTTP carries `mcp-session-id`; stdio has no such header because it
     has no second conversation to confuse ours with.
     """
-    headers = getattr(getattr(ctx, "transport", None), "headers", None) or {}
+    headers = getattr(getattr(ctx, "request", None), "headers", None) or {}
     return headers.get(MCP_SESSION_HEADER) or STDIO_SESSION_KEY
 
 
 def build_server(backend: ToolBackend, *, name: str = "tutu-mcp-proxy") -> MCPServer:
-    server = MCPServer(name=name, instructions=PROXY_INSTRUCTIONS)
-
     catalog: list[dict[str, Any]] | None = None
     trimmed_originals: dict[str, str] = {}
     sessions: dict[str, SessionPremises] = {}
+    # Guards the fetch-and-fill below: without it, two `tools/list`/`tools/call`
+    # requests arriving before the catalog has ever loaded would both see `None`
+    # and both hit `backend.list_tools()` — redundant against a shared rate limit,
+    # though not incorrect on its own.
+    catalog_lock = anyio.Lock()
 
     def session_for(ctx: Any) -> SessionPremises:
         key = _session_key(ctx)
@@ -109,66 +100,55 @@ def build_server(backend: ToolBackend, *, name: str = "tutu-mcp-proxy") -> MCPSe
     async def load_catalog() -> list[dict[str, Any]]:
         nonlocal catalog, trimmed_originals
         if catalog is None:
-            compacted, trimmed_originals = apply_compact_overrides(await backend.list_tools())
-            catalog = [*compacted, ASSESS_REQUEST_TOOL, CHECK_GROUNDEDNESS_TOOL]
+            async with catalog_lock:
+                # re-check: another task may have filled it while we waited for the lock
+                if catalog is None:
+                    raw = await call_with_timeout_retry(backend.list_tools)
+                    compacted, trimmed_originals = apply_compact_overrides(raw)
+                    catalog = proxy_catalog(compacted)
         return catalog
 
     async def on_list_tools(
         ctx: Any, params: types.PaginatedRequestParams | None
     ) -> types.ListToolsResult:
-        tools = [types.Tool.model_validate(t) for t in await load_catalog()]
+        try:
+            tools = [types.Tool.model_validate(t) for t in await load_catalog()]
+        except Exception as exc:
+            # `tools/list` has no per-item error slot like `CallToolResult.is_error`,
+            # so a broken catalog is a protocol-level failure either way — but this
+            # gives it the same fixture/timeout/upstream classification `dispatch`
+            # uses for `tools/call`, instead of the SDK's generic "Internal server error".
+            raise MCPError(
+                code=types.INTERNAL_ERROR, message=backend_error("tools/list", exc).text
+            ) from exc
         return types.ListToolsResult(tools=tools)
 
     async def on_call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
-        await load_catalog()  # ensures trimmed_originals is populated before any appendix lookup
+        try:
+            # also populates trimmed_originals, needed below for the appendix lookup
+            await load_catalog()
+        except Exception as exc:
+            error = backend_error(params.name, exc)
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=error.text)], is_error=True
+            )
         session = session_for(ctx)
         arguments = params.arguments or {}
 
-        if params.name == "assess_request":
-            text, is_error = run_assess_request_tool(arguments, session)
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=text)], is_error=is_error
-            )
-
-        if params.name == "check_groundedness":
-            return _run_check_groundedness(arguments, session)
-
-        # Control fields are ours, not Tutu's: strip them before the call goes out,
-        # or the fixture store misses on every scenario and upstream is handed a
-        # field its schema never declared.
-        clean, sources, assume = strip_control_fields(arguments)
-
-        decision = session.evaluate(params.name, clean, sources, assume)
-        if decision is not None:
-            # Deliberately NOT is_error: clients surface a tool error to the user as
-            # a red failure and agents retry it blindly. This is a successful call
-            # whose payload happens to be a question.
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=decision.to_json())], is_error=False
-            )
-
-        try:
-            result = await backend.call_tool(params.name, clean)
-        except FixtureNotFoundError as exc:
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=str(exc))], is_error=True
-            )
-
-        session.record_result(result.text)
-        text = apply_result_appendix(params.name, result.text, trimmed_originals)
-        preamble = session.preamble()
-        if preamble:
-            text = f"{text}\n\n## Обязательная преамбула ответа\n{preamble}"
+        result = await dispatch(session, backend, params.name, arguments, trimmed_originals)
         return types.CallToolResult(
-            content=[types.TextContent(type="text", text=text)], is_error=result.is_error
+            content=[types.TextContent(type="text", text=result.text)], is_error=result.is_error
         )
 
-    # accesses the private `_lowlevel_server` seam — see module docstring
+    server = MCPServer(
+        name=name,
+        instructions=PROXY_INSTRUCTIONS,
+        extensions=[_ToolCallDispatch(on_call_tool)],
+    )
+
+    # No public hook replaces `tools/list` wholesale — see module docstring.
     server._lowlevel_server.add_request_handler(
         "tools/list", types.PaginatedRequestParams, on_list_tools
-    )
-    server._lowlevel_server.add_request_handler(
-        "tools/call", types.CallToolRequestParams, on_call_tool
     )
 
     return server

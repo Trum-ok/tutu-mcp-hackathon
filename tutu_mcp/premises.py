@@ -51,6 +51,12 @@ SOURCES_KEY = "_sources"
 ASSUME_KEY = "_assume"
 CONTROL_KEYS = (SOURCES_KEY, ASSUME_KEY)
 
+# The `status` a `GateDecision` payload carries instead of tool data. Exported
+# so callers detect a fired gate by parsing this field (`ToolCallRecord.parsed_result()`)
+# rather than substring-matching the raw text, which a coincidental match elsewhere
+# in a result (an echoed error message, a quoted field) could trip by accident.
+GATE_STATUS = "clarification_required"
+
 
 @dataclass(frozen=True)
 class FieldPolicy:
@@ -396,7 +402,7 @@ class GateDecision:
     def to_json(self) -> str:
         return json.dumps(
             {
-                "status": "clarification_required",
+                "status": GATE_STATUS,
                 "tool": self.tool,
                 "reason": (
                     "запрос опирается на значения, которых нет ни в словах пользователя, "

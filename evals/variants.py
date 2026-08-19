@@ -4,32 +4,28 @@ Both variants read the SAME backend, so tool *results* are byte-identical betwee
 them and the only difference is the tool surface the agent sees. That isolation is
 the whole experiment — if the data differed too, a win could just mean better data.
 
-The proxy variant calls the same `apply_compact_overrides` / `apply_result_appendix`
-/ `run_check_groundedness_tool` functions the live MCP server calls, so this
-measures the real proxy behavior rather than a re-implementation of it. It skips
-only the HTTP/MCP transport hop, which is identical for both variants anyway.
+The proxy variant runs every call through `tutu_mcp.proxy.dispatch.dispatch` — the
+exact same pipeline the live MCP server calls — so this measures the real proxy
+behavior rather than a re-implementation of it. It skips only the HTTP/MCP
+transport hop, which is identical for both variants anyway.
 """
 
 import time
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+# Defined in `evals.options` (a stdlib-only leaf) and re-exported here, where
+# they belong: `EvalOptions` needs them for its default, and importing this
+# module to get two strings would drag the whole proxy into `tutu.py --help`.
+from evals.options import BASELINE as BASELINE
+from evals.options import PROXY as PROXY
 from tutu_mcp.backend import ToolBackend
-from tutu_mcp.groundedness import run_check_groundedness_tool
-from tutu_mcp.premises import (
-    ASSESS_REQUEST_TOOL,
-    SessionPremises,
-    run_assess_request_tool,
-    strip_control_fields,
-)
-from tutu_mcp.proxy.compact_tools import apply_compact_overrides, apply_result_appendix
-from tutu_mcp.proxy.server import CHECK_GROUNDEDNESS_TOOL, PROXY_INSTRUCTIONS
-from tutu_mcp.replay.store import FixtureNotFoundError
+from tutu_mcp.premises import SessionPremises
+from tutu_mcp.proxy.compact_tools import apply_compact_overrides
+from tutu_mcp.proxy.dispatch import dispatch
+from tutu_mcp.proxy.surface import PROXY_INSTRUCTIONS, proxy_catalog
 
 from .transcript import ToolCallRecord
-
-BASELINE = "baseline"
-PROXY = "proxy"
 
 
 @dataclass
@@ -53,64 +49,35 @@ class Variant:
         """
         return replace(self, premises=None if self.premises is None else SessionPremises())
 
-    def _record(self, name, arguments, text, is_error, started, **extra) -> ToolCallRecord:
+    def _record(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        text: str,
+        is_error: bool,
+        started: float,
+        *,
+        fixture_miss: bool = False,
+    ) -> ToolCallRecord:
         return ToolCallRecord(
             name=name,
             arguments=arguments,
             result_text=text,
             is_error=is_error,
+            fixture_miss=fixture_miss,
             duration_s=time.monotonic() - started,
-            **extra,
         )
 
     async def execute(self, name: str, arguments: dict[str, Any]) -> ToolCallRecord:
         started = time.monotonic()
-        session = self.premises
-
-        if name == "assess_request":
-            if session is None:  # not on this surface — same shape as an unknown tool
-                return self._record(name, arguments, f"unknown tool: {name}", True, started)
-            text, is_error = run_assess_request_tool(arguments, session)
-            return self._record(name, arguments, text, is_error, started)
-
-        if name == "check_groundedness":
-            text, is_error = run_check_groundedness_tool(
-                arguments,
-                assumed_values=session.assumed_values() if session else None,
-                assumptions=session.assumption_lines() if session else None,
-            )
-            return self._record(name, arguments, text, is_error, started)
-
-        clean, sources, assume = strip_control_fields(arguments)
-        if session is not None:
-            decision = session.evaluate(name, clean, sources, assume)
-            if decision is not None:
-                return self._record(name, arguments, decision.to_json(), False, started)
-        arguments = clean
-
         assert self.backend is not None
-        try:
-            result = await self.backend.call_tool(name, arguments)
-        except FixtureNotFoundError as exc:
-            return ToolCallRecord(
-                name=name,
-                arguments=arguments,
-                result_text=str(exc),
-                is_error=True,
-                fixture_miss=True,
-                duration_s=time.monotonic() - started,
-            )
 
-        text = result.text
-        if self.trimmed_originals:
-            text = apply_result_appendix(name, text, self.trimmed_originals)
-        if session is not None:
-            session.record_result(result.text)
-            preamble = session.preamble()
-            if preamble:
-                text = f"{text}\n\n## Обязательная преамбула ответа\n{preamble}"
-
-        return self._record(name, arguments, text, result.is_error, started)
+        result = await dispatch(
+            self.premises, self.backend, name, arguments, self.trimmed_originals
+        )
+        return self._record(
+            name, arguments, result.text, result.is_error, started, fixture_miss=result.fixture_miss
+        )
 
 
 async def build_variants(
@@ -128,7 +95,7 @@ async def build_variants(
         ),
         PROXY: Variant(
             name=PROXY,
-            tools=[*compacted, ASSESS_REQUEST_TOOL, CHECK_GROUNDEDNESS_TOOL],
+            tools=proxy_catalog(compacted),
             server_instructions=PROXY_INSTRUCTIONS,
             trimmed_originals=trimmed_originals,
             backend=backend,
