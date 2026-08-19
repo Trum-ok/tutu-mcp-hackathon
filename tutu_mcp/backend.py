@@ -49,6 +49,17 @@ class BackendMissError(BackendError):
     status = "fixture_not_found"
 
 
+class BackendCorruptError(BackendError):
+    """The backend's own recorded data is unreadable (a mock's malformed fixture).
+
+    Distinct from `BackendMissError` because the fix is different: a miss is
+    closed by recording the call, a corrupt fixture by re-recording or deleting
+    the file that already exists.
+    """
+
+    status = "fixture_corrupt"
+
+
 class BackendTimeoutError(BackendError):
     """The backend didn't answer within its configured timeout."""
 
@@ -62,12 +73,24 @@ class BackendUnavailableError(BackendError):
 
 
 ERROR_STATUSES = frozenset(
-    {BackendMissError.status, BackendTimeoutError.status, BackendUnavailableError.status}
+    {
+        BackendMissError.status,
+        BackendCorruptError.status,
+        BackendTimeoutError.status,
+        BackendUnavailableError.status,
+    }
 )
 """Every status `dispatch.backend_error` can produce — the single source of
 truth for anything downstream that needs to recognize one of our own error
 payloads (e.g. `tutu_mcp.groundedness`, which must not treat an error
 payload's echoed arguments as grounding evidence)."""
+
+
+LOCAL_FIXTURE_STATUSES = frozenset({BackendMissError.status, BackendCorruptError.status})
+"""The statuses that mean the gap is in OUR recorded fixtures rather than in
+upstream. Callers that report "how often did Tutu fail" (`proxy.dispatch`'s
+`fixture_miss`, and the eval transcript counters built on it) must not count
+these, or a hole in our own recording reads as Tutu misbehaving."""
 
 
 async def call_with_timeout_retry[T](call: Callable[[], Awaitable[T]]) -> T:

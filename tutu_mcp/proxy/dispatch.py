@@ -16,7 +16,12 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from tutu_mcp.backend import BackendError, ToolBackend, call_with_timeout_retry
+from tutu_mcp.backend import (
+    LOCAL_FIXTURE_STATUSES,
+    BackendError,
+    ToolBackend,
+    call_with_timeout_retry,
+)
 from tutu_mcp.premises import SessionPremises, strip_control_fields
 
 from .compact_tools import apply_result_appendix
@@ -27,9 +32,10 @@ from .surface import SYNTHETIC
 class DispatchResult:
     text: str
     is_error: bool
-    # True when the mock backend had no fixture for these arguments — a gap in
-    # OUR eval recording, not Tutu misbehaving. Kept separate from `is_error`
-    # so the two never get conflated by a caller that only checks one of them.
+    # True when the mock backend could not serve these arguments from disk —
+    # nothing recorded, or a recorded file that no longer parses. Either way a
+    # gap in OUR eval recording, not Tutu misbehaving. Kept separate from
+    # `is_error` so a caller that checks only one never conflates the two.
     fixture_miss: bool = False
 
 
@@ -54,8 +60,35 @@ def backend_error(name: str, exc: Exception) -> DispatchResult:
     return DispatchResult(
         json.dumps(payload, ensure_ascii=False),
         is_error=True,
-        fixture_miss=status == "fixture_not_found",
+        fixture_miss=status in LOCAL_FIXTURE_STATUSES,
     )
+
+
+# Our own key, so a consumer can tell it from Tutu's data — same convention as the
+# `_sources` / `_assume` arguments on the way in.
+PREAMBLE_KEY = "_answer_preamble"
+
+
+def attach_preamble(text: str, preamble: str) -> str:
+    """Carry the mandatory preamble INSIDE the result rather than after it.
+
+    Appending it as trailing prose was the obvious thing and it silently broke
+    every JSON consumer of the result — including our own eval harness, which
+    parses `tool_result` text to build the grounding evidence set and therefore
+    dropped the whole payload the moment an assumption was declared. That scored
+    the proxy's own answers as ungrounded on data it had actually returned.
+
+    A non-JSON result (an upstream error string, say) keeps the appended form —
+    there is no object to put a field on, and mangling it would be worse.
+    """
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        payload = None
+    if not isinstance(payload, dict):
+        return f"{text}\n\n## Обязательная преамбула ответа\n{preamble}"
+    payload[PREAMBLE_KEY] = preamble
+    return json.dumps(payload, ensure_ascii=False)
 
 
 async def dispatch(
@@ -109,6 +142,6 @@ async def dispatch(
             session.record_result(result.text)
         preamble = session.preamble()
         if preamble:
-            text = f"{text}\n\n## Обязательная преамбула ответа\n{preamble}"
+            text = attach_preamble(text, preamble)
 
     return DispatchResult(text, result.is_error)

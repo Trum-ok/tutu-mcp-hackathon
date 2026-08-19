@@ -19,12 +19,30 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from tutu_mcp.backend import BackendMissError, ToolCallResult
+from tutu_mcp.backend import (
+    BackendCorruptError,
+    BackendError,
+    BackendMissError,
+    ToolCallResult,
+)
 
 TOOLS_LIST_FIXTURE = "_meta/tools_list.json"
 SERVER_INFO_FIXTURE = "_meta/server_info.json"
 
 _SLUG_UNSAFE = re.compile(r"[^a-z0-9]+")
+
+
+def _is_empty(value: Any) -> bool:
+    """Values that mean "this filter is not set".
+
+    `None` is the obvious one, but a model told to drop an argument routinely
+    sends `""` or `[]` instead of omitting the key — same request, three
+    spellings. `tutu_mcp.premises` already treats all three as narrowing nothing;
+    keying fixtures on them anyway made a correct call miss a perfectly good
+    recording. `False` is NOT empty: it is a real boolean answer, and where it is
+    also the schema default the defaults check prunes it.
+    """
+    return value is None or value == "" or value == [] or value == {}
 
 
 def normalize_arguments(arguments: dict[str, Any], defaults: dict[str, Any] | None = None) -> str:
@@ -49,7 +67,7 @@ def normalize_arguments(arguments: dict[str, Any], defaults: dict[str, Any] | No
     pruned = {
         k: v
         for k, v in arguments.items()
-        if v is not None and not (k in defaults and v == defaults[k])
+        if not _is_empty(v) and not (k in defaults and v == defaults[k])
     }
     return json.dumps(pruned, ensure_ascii=False, sort_keys=True)
 
@@ -64,6 +82,30 @@ def scenario_slug(tool: str, arguments: dict[str, Any]) -> str:
     hint_parts = [str(v) for _, v in sorted(arguments.items()) if isinstance(v, str | int)][:3]
     hint = _SLUG_UNSAFE.sub("_", "_".join(hint_parts).lower()).strip("_")[:40]
     return f"auto_{hint}_{digest}" if hint else f"auto_{digest}"
+
+
+class FixtureMissingError(BackendMissError):
+    """A fixture file the store needs was never recorded."""
+
+    def __init__(self, relative_path: str) -> None:
+        self.relative_path = relative_path
+        super().__init__(f"{relative_path} not recorded — run `uv run python tutu.py record` first")
+
+
+class FixtureCorruptError(BackendCorruptError):
+    """A fixture file exists but cannot be replayed.
+
+    Names the file relative to `fixtures_dir` rather than by absolute path: this
+    message is handed to the agent verbatim by `proxy.dispatch.backend_error`,
+    and the host's directory layout is neither useful there nor ours to leak.
+    """
+
+    def __init__(self, relative_path: str, reason: str) -> None:
+        self.relative_path = relative_path
+        super().__init__(
+            f"Fixture {relative_path} is unusable ({reason}) — re-record it with "
+            f"`uv run python tutu.py record`, or delete the file."
+        )
 
 
 class FixtureNotFoundError(BackendMissError):
@@ -86,6 +128,26 @@ class FixtureStore:
     def _tool_dir(self, tool: str) -> Path:
         return self.fixtures_dir / tool
 
+    def _read_json(self, path: Path) -> Any:
+        """Reads one fixture file, translating both ways it can fail into a
+        `BackendError`.
+
+        This is the mock backend's boundary in the sense `tutu_mcp.backend`
+        describes: a missing or malformed file on OUR disk must not reach
+        `proxy.dispatch` as a bare OSError, which it would classify as
+        `upstream_unavailable` — telling the agent Tutu is down when in fact
+        our own recording is incomplete.
+        """
+        relative = path.relative_to(self.fixtures_dir).as_posix()
+        if not path.is_file():
+            raise FixtureMissingError(relative)
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise FixtureCorruptError(relative, f"invalid JSON: {exc}") from exc
+        except OSError as exc:
+            raise FixtureCorruptError(relative, f"unreadable: {exc.strerror or exc}") from exc
+
     def schema_defaults(self, tool: str) -> dict[str, Any]:
         """Per-argument defaults the tool's own `inputSchema` declares.
 
@@ -103,7 +165,7 @@ class FixtureStore:
                         for name, field in props.items()
                         if isinstance(field, dict) and "default" in field
                     }
-            except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            except (BackendError, KeyError):
                 # No catalog recorded yet — fall back to exact matching rather
                 # than refusing to serve fixtures at all.
                 self._defaults = {}
@@ -130,7 +192,11 @@ class FixtureStore:
             return []
         scenarios = []
         for path in sorted(tool_dir.glob("*.json")):
-            scenarios.append(json.loads(path.read_text(encoding="utf-8")))
+            entry = self._read_json(path)
+            if not isinstance(entry, dict) or "arguments" not in entry or "result" not in entry:
+                relative = path.relative_to(self.fixtures_dir).as_posix()
+                raise FixtureCorruptError(relative, "missing `arguments` or `result`")
+            scenarios.append(entry)
         return scenarios
 
     def find_result(self, tool: str, arguments: dict[str, Any]) -> ToolCallResult:
@@ -139,7 +205,12 @@ class FixtureStore:
         scenarios = self.load_scenarios(tool)
         for entry in scenarios:
             if normalize_arguments(entry["arguments"], defaults) == target:
-                return ToolCallResult(**entry["result"])
+                try:
+                    return ToolCallResult(**entry["result"])
+                except TypeError as exc:
+                    raise FixtureCorruptError(
+                        f"{tool}/{entry.get('scenario', '?')}.json", f"bad `result` shape: {exc}"
+                    ) from exc
         raise FixtureNotFoundError(tool, arguments, [e["scenario"] for e in scenarios])
 
     def save_tools_list(self, tools: list[dict[str, Any]]) -> Path:
@@ -149,10 +220,7 @@ class FixtureStore:
         return path
 
     def load_tools_list(self) -> list[dict[str, Any]]:
-        path = self.fixtures_dir / TOOLS_LIST_FIXTURE
-        if not path.is_file():
-            raise FileNotFoundError(f"{path} missing — run `uv run python tutu.py record` first")
-        return json.loads(path.read_text(encoding="utf-8"))
+        return self._read_json(self.fixtures_dir / TOOLS_LIST_FIXTURE)
 
     def save_server_info(self, info: dict[str, Any]) -> Path:
         path = self.fixtures_dir / SERVER_INFO_FIXTURE
@@ -161,10 +229,7 @@ class FixtureStore:
         return path
 
     def load_server_info(self) -> dict[str, Any]:
-        path = self.fixtures_dir / SERVER_INFO_FIXTURE
-        if not path.is_file():
-            raise FileNotFoundError(f"{path} missing — run `uv run python tutu.py record` first")
-        return json.loads(path.read_text(encoding="utf-8"))
+        return self._read_json(self.fixtures_dir / SERVER_INFO_FIXTURE)
 
     def instructions(self) -> str:
         """Upstream's always-on `initialize` instructions — part of what the

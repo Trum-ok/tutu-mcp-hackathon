@@ -12,7 +12,12 @@ quietly start hammering the shared hackathon rate limit.
 from typing import Any
 
 from tutu_mcp.backend import ToolCallResult
-from tutu_mcp.replay.store import FixtureNotFoundError, FixtureStore, scenario_slug
+from tutu_mcp.replay.store import (
+    FixtureMissingError,
+    FixtureNotFoundError,
+    FixtureStore,
+    scenario_slug,
+)
 from tutu_mcp.upstream.client import UpstreamClient
 
 
@@ -25,7 +30,7 @@ class RecordingBackend:
     async def list_tools(self) -> list[dict[str, Any]]:
         try:
             return self._store.load_tools_list()
-        except FileNotFoundError:
+        except FixtureMissingError:
             tools = await self._upstream.list_tools()
             self._store.save_tools_list(tools)
             return tools

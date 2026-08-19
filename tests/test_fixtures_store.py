@@ -1,7 +1,7 @@
 import pytest
 
 from tutu_mcp.backend import ToolCallResult
-from tutu_mcp.replay.store import FixtureNotFoundError, FixtureStore
+from tutu_mcp.replay.store import FixtureNotFoundError, FixtureStore, normalize_arguments
 
 
 def test_save_and_find_result_roundtrips_on_exact_arguments(tmp_path):
@@ -96,3 +96,24 @@ def test_matching_falls_back_to_exact_when_no_catalog_is_recorded(tmp_path):
     )
 
     assert store.find_result("search_rail", {"origin": "Мск"}).text == "ok"
+
+
+@pytest.mark.parametrize("empty", [None, "", []])
+def test_an_emptied_out_filter_still_finds_its_fixture(repo_fixtures, empty):
+    """An agent told to drop an argument often sends it as empty instead of
+    omitting it. All three spellings mean the same request, so all three must hit
+    the recording made without the field."""
+    args = {
+        "origin": "Москва",
+        "destination": "Санкт-Петербург",
+        "departure_date": "2026-08-25",
+        "service_class": empty,
+    }
+    result = repo_fixtures.find_result("search_avia", args)
+    assert not result.is_error
+
+
+def test_false_is_not_treated_as_empty():
+    """`direct_only=False` is a real answer, not an unset field — conflating them
+    would make a filtered search play back an unfiltered recording."""
+    assert normalize_arguments({"direct_only": False}) == '{"direct_only": false}'
