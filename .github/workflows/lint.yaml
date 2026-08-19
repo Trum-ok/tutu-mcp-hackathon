@@ -44,4 +44,4 @@ jobs:
         run: npm ci
 
       - name: biome
-        run: npx --no biome ci viewer
+        run: npx --no biome ci viewer tests

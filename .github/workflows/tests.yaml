@@ -10,6 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # tests/test_viewer_contract.py прогоняет viewer/app.js в node: без него
+      # тест не падает, а тихо скипается — и контракт остаётся непроверенным
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:

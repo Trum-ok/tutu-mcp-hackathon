@@ -6,7 +6,8 @@
       "viewer/styles.css",
       "viewer/tokens.css",
       "pages/app.js",
-      "pages/styles.css"
+      "pages/styles.css",
+      "tests/viewer_smoke.mjs"
     ]
   },
   "formatter": {

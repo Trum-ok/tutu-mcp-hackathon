@@ -14,10 +14,10 @@ format:
 
 # фронт вьювера и доки отдельно от питона: своя тулза, свой цикл правок
 lint-front:
-	npx --no biome ci viewer pages
+	npx --no biome ci viewer pages tests
 
 format-front:
-	npx --no biome check --write viewer pages
+	npx --no biome check --write viewer pages tests
 
 test:
 	uv run pytest
