@@ -29,6 +29,7 @@ from .agent import (
     to_responses_tools,
 )
 from .config import DEFAULT_MODEL
+from .options import Api
 
 PROBE_MESSAGE = "привет"
 
@@ -55,17 +56,31 @@ class TokenCounter(Protocol):
     @property
     def exact(self) -> bool: ...
 
+    @property
+    def estimate_reason(self) -> str | None:
+        """Why this run is estimating, for the report to say out loud. `None` on an
+        exact counter. A bare "неточно" sent readers hunting for a missing key even
+        when the key was there and a flag had asked for the estimate."""
+        ...
+
     async def count(self, *, tools: list[dict[str, Any]], system: str) -> int: ...
 
 
-def render_tools(tools: list[dict[str, Any]], api: str) -> list[dict[str, Any]]:
+def render_tools(tools: list[dict[str, Any]], api: Api) -> list[dict[str, Any]]:
     """Tool definitions exactly as the chosen endpoint receives them. The two
     endpoints nest them differently, so measuring against the wrong one reports a
-    surface cost the run never paid."""
-    return to_responses_tools(tools) if api == "responses" else to_openai_tools(tools)
+    surface cost the run never paid.
+
+    Takes the enum rather than its string: as `api == "responses"` this branch fell
+    through to the Chat serialization on any value that was not that exact literal,
+    so a typo anywhere upstream would have quietly re-measured the headline saving
+    against the wrong endpoint — with no error to notice. A string still works and
+    is validated here rather than silently falling through, so the failure mode is
+    a loud `ValueError` instead of a wrong number."""
+    return to_responses_tools(tools) if Api(api) is Api.RESPONSES else to_openai_tools(tools)
 
 
-def surface_bytes(tools: list[dict[str, Any]], system: str, api: str = "responses") -> int:
+def surface_bytes(tools: list[dict[str, Any]], system: str, api: Api = Api.RESPONSES) -> int:
     """Raw size of exactly what the agent sends, so bytes and tokens describe the
     same payload — measuring one against the rendered prompt and the other against
     the bare instructions would make the two columns silently incomparable."""
@@ -74,7 +89,7 @@ def surface_bytes(tools: list[dict[str, Any]], system: str, api: str = "response
     )
 
 
-def _payload_text(tools: list[dict[str, Any]], system: str, api: str) -> str:
+def _payload_text(tools: list[dict[str, Any]], system: str, api: Api) -> str:
     return (
         json.dumps(render_tools(tools, api), ensure_ascii=False)
         + build_system_prompt(system)
@@ -87,12 +102,17 @@ class OfflineTokenCounter:
     """tiktoken where available, chars-per-token where it is not."""
 
     model: str = DEFAULT_MODEL
-    api: str = "responses"
+    api: Api = Api.RESPONSES
     chars_per_token: float = HEURISTIC_CHARS_PER_TOKEN
+    reason: str = "точный замер отключён"
 
     @property
     def exact(self) -> bool:
         return False
+
+    @property
+    def estimate_reason(self) -> str | None:
+        return self.reason
 
     def _encoding(self):
         try:
@@ -126,6 +146,10 @@ class ChatApiTokenCounter:
     @property
     def exact(self) -> bool:
         return True
+
+    @property
+    def estimate_reason(self) -> str | None:
+        return None
 
     async def count(self, *, tools: list[dict[str, Any]], system: str) -> int:
         client = make_client()
@@ -163,6 +187,10 @@ class ResponsesApiTokenCounter:
     def exact(self) -> bool:
         return True
 
+    @property
+    def estimate_reason(self) -> str | None:
+        return None
+
     async def count(self, *, tools: list[dict[str, Any]], system: str) -> int:
         client = make_client()
         response = await client.responses.create(
@@ -183,7 +211,7 @@ async def measure_surface(
     variant_name: str,
     tools: list[dict[str, Any]],
     system: str,
-    api: str = "responses",
+    api: Api = Api.RESPONSES,
 ) -> SurfaceCost:
     return SurfaceCost(
         variant=variant_name,
