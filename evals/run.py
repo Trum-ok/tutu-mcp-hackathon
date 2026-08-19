@@ -210,10 +210,21 @@ async def run_evals(opts: EvalOptions) -> int:
     out_path = report_mod.write_json(run, out)
     print(f"\nПодробный отчёт: {out_path}")
 
-    if isinstance(backend, RecordingBackend) and backend.recorded:
-        print(f"Дозаписано фикстур: {len(backend.recorded)}")
-        for tool, scenario in backend.recorded:
-            print(f"  + {tool}/{scenario}")
+    if isinstance(backend, RecordingBackend):
+        if backend.recorded:
+            print(f"Дозаписано фикстур: {len(backend.recorded)}")
+            for tool, scenario in backend.recorded:
+                print(f"  + {tool}/{scenario}")
+        if backend.skipped_errors:
+            # Named, not just counted: these misses are still open, and a run
+            # printing the recorded count alone would read as "holes closed".
+            print(
+                f"Не записано (upstream ответил ошибкой): {len(backend.skipped_errors)} — "
+                "промах остался, повторите запись",
+                file=sys.stderr,
+            )
+            for tool, scenario in backend.skipped_errors:
+                print(f"  ! {tool}/{scenario}", file=sys.stderr)
 
     if self_check:
         mismatches = self_check_mismatches(run)

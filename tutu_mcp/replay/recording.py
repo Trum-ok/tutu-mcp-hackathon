@@ -11,21 +11,23 @@ quietly start hammering the shared hackathon rate limit.
 
 from typing import Any
 
-from tutu_mcp.backend import ToolCallResult
+from tutu_mcp.backend import ToolBackend, ToolCallResult
 from tutu_mcp.replay.store import (
     FixtureMissingError,
     FixtureNotFoundError,
     FixtureStore,
     scenario_slug,
 )
-from tutu_mcp.upstream.client import UpstreamClient
 
 
 class RecordingBackend:
-    def __init__(self, store: FixtureStore, upstream: UpstreamClient) -> None:
+    def __init__(self, store: FixtureStore, upstream: ToolBackend) -> None:
         self._store = store
         self._upstream = upstream
         self.recorded: list[tuple[str, str]] = []
+        # errored calls we refused to record, so a run can say so instead of
+        # reporting the miss as closed
+        self.skipped_errors: list[tuple[str, str]] = []
 
     async def list_tools(self) -> list[dict[str, Any]]:
         try:
@@ -43,6 +45,15 @@ class RecordingBackend:
 
         result = await self._upstream.call_tool(name, arguments)
         scenario = scenario_slug(name, arguments)
+        if result.is_error:
+            # A rate-limited, timed-out or rejected call is not a recording of what
+            # Tutu answers for these arguments. Saved once, it would be replayed as
+            # data by every later offline run — an outage frozen into the fixture
+            # set, indistinguishable from a real response. Hand it to the caller,
+            # who already classifies upstream failures, and record nothing.
+            self.skipped_errors.append((name, scenario))
+            return result
+
         self._store.save_tool_result(name, scenario, arguments, result)
         self.recorded.append((name, scenario))
         return result
