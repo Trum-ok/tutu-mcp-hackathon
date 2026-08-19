@@ -27,7 +27,7 @@ evals/                     харнесс, который измеряет пр�
   options.py               перечисления и опции одного прогона эвалов
   scenarios.py             сценарии, через которые прогоняются обе поверхности
   fixtures_recipe.py       список вызовов для `tutu.py record` — те же даты, что в сценариях
-  variants.py               два сравниваемых варианта: baseline и proxy
+  variants.py              два сравниваемых варианта: baseline и proxy
   agent.py                 агент под тестом (OpenAI либо скриптованная заглушка для CI)
   runner.py                прогоняет один сценарий, собирает transcript
   transcript.py            общая запись одного прогона агента
@@ -46,9 +46,15 @@ viewer/                    UI трейс-вьювера: template.html + styles.
 pages/                     пользовательская дока: тот же паттерн сборки, что у вьювера
   build.py                 запекает pages/template.html + styles.css + app.js в site/index.html
 site/                      только генерируется — дока и трейс-вьювер, публикуются на Pages
-docs/
+docs/                      всё, что не поместилось в README, плюс его картинки
   findings.md              сырые замеры и мотивирующий кейс, датировано и привязано к версии сервера
+  compaction.md            разбивка экономии по слоям, цена сжатия, чего не делали
+  evals.md                 устройство харнесса, фикстуры, снимок прогона в репозитории
+  structure.md             этот файл
+  configuration.md         переменные окружения и make-цели
+  deploy.md                Docker/Render/Pages и сборка обеих статических страниц
   trace-viewer-preview.png скриншот вьювера для README
+  doc-preview.png          скриншот страницы документации для README
 fixtures/                  записанные ответы (tools/list, инструкции, поиски, ...)
 tests/                     pytest, целиком по записанным фикстурам, без сети
   viewer_smoke.mjs         прогоняет viewer/app.js в node: контракт report.py -> вьювер
