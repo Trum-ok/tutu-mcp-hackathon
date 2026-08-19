@@ -59,16 +59,30 @@ class Transcript:
         return [c.name for c in self.tool_calls]
 
     def gate_fired(self) -> bool:
-        """A `GateDecision` payload came back instead of data at least once —
-        the premise gate asked a clarifying question rather than letting an
-        invented value through. Checks the parsed `status` field rather than
-        substring-matching `result_text`, so an unrelated result that happens
-        to quote the same words (an echoed error, a translated answer) can't
-        register as a fired gate."""
-        return any(
-            isinstance(parsed := c.parsed_result(), dict) and parsed.get("status") == GATE_STATUS
-            for c in self.tool_calls
-        )
+        """The premise machinery intervened at least once, rather than letting an
+        invented value through.
+
+        Two shapes count, because the mechanism has two entry points. A
+        `GateDecision` payload (`status: clarification_required`) is the gate
+        firing on a `tools/call`. A non-`proceed` verdict from `assess_request`
+        is the SAME rule reached earlier, through the cheap preflight — and that
+        is the better outcome, not a lesser one: the agent learns a parameter is
+        unsettled before spending a search on it. Counting only the first shape
+        scored the ideal run (preflight says ask, agent asks, nothing is searched)
+        as "гейт не сработал".
+
+        Both read a parsed field rather than substring-matching `result_text`, so
+        a result that merely quotes the same words cannot register as a firing.
+        """
+        for call in self.tool_calls:
+            parsed = call.parsed_result()
+            if not isinstance(parsed, dict):
+                continue
+            if parsed.get("status") == GATE_STATUS:
+                return True
+            if parsed.get("verdict") not in (None, "proceed"):
+                return True
+        return False
 
     def result_payloads(self) -> list[Any]:
         """Every successfully parsed tool_result payload — the grounding evidence set.
