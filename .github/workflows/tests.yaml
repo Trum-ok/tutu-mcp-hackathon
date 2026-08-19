@@ -26,3 +26,11 @@ jobs:
 
       - name: pytest
         run: uv run pytest
+
+      # Unit tests prove the pieces; this proves the harness as a whole still
+      # tells a grounded answer from a fabricated one. It replays hand-written
+      # answers over recorded fixtures — no key, no network — and exits non-zero
+      # if any verdict moved, so a check that silently stopped firing fails CI
+      # instead of showing up as an improved score.
+      - name: self-check харнесса
+        run: uv run python tutu.py evals --agent scripted
