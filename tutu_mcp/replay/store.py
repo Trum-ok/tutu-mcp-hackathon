@@ -19,7 +19,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from tutu_mcp.backend import ToolCallResult
+from tutu_mcp.backend import BackendMissError, ToolCallResult
 
 TOOLS_LIST_FIXTURE = "_meta/tools_list.json"
 SERVER_INFO_FIXTURE = "_meta/server_info.json"
@@ -66,7 +66,7 @@ def scenario_slug(tool: str, arguments: dict[str, Any]) -> str:
     return f"auto_{hint}_{digest}" if hint else f"auto_{digest}"
 
 
-class FixtureNotFoundError(RuntimeError):
+class FixtureNotFoundError(BackendMissError):
     def __init__(self, tool: str, arguments: dict[str, Any], available: list[str]) -> None:
         self.tool = tool
         self.arguments = arguments
@@ -74,7 +74,7 @@ class FixtureNotFoundError(RuntimeError):
         listed = ", ".join(available) if available else "(none recorded)"
         super().__init__(
             f"No fixture for {tool}({arguments!r}). Recorded scenarios for {tool}: {listed}. "
-            f"Run `uv run python scripts/record_fixtures.py` against the live server to add it."
+            f"Run `uv run python tutu.py record` against the live server to add it."
         )
 
 
@@ -151,9 +151,7 @@ class FixtureStore:
     def load_tools_list(self) -> list[dict[str, Any]]:
         path = self.fixtures_dir / TOOLS_LIST_FIXTURE
         if not path.is_file():
-            raise FileNotFoundError(
-                f"{path} missing — run `uv run python scripts/record_fixtures.py` first"
-            )
+            raise FileNotFoundError(f"{path} missing — run `uv run python tutu.py record` first")
         return json.loads(path.read_text(encoding="utf-8"))
 
     def save_server_info(self, info: dict[str, Any]) -> Path:
@@ -165,9 +163,7 @@ class FixtureStore:
     def load_server_info(self) -> dict[str, Any]:
         path = self.fixtures_dir / SERVER_INFO_FIXTURE
         if not path.is_file():
-            raise FileNotFoundError(
-                f"{path} missing — run `uv run python scripts/record_fixtures.py` first"
-            )
+            raise FileNotFoundError(f"{path} missing — run `uv run python tutu.py record` first")
         return json.loads(path.read_text(encoding="utf-8"))
 
     def instructions(self) -> str:

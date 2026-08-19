@@ -26,7 +26,9 @@ async def serve() -> None:
         await server.run_streamable_http_async(host=settings.host, port=settings.port)
         return
 
-    async with UpstreamClient(settings.upstream_url) as backend:
+    async with UpstreamClient(
+        settings.upstream_url, timeout_s=settings.upstream_timeout_s
+    ) as backend:
         server = build_server(backend, name="tutu-mcp-proxy")
         print(f"[tutu-mcp-proxy] live mode — upstream={settings.upstream_url}")
         print(f"[tutu-mcp-proxy] listening on http://{settings.host}:{settings.port}/mcp")

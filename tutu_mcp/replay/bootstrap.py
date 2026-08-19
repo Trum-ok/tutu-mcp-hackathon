@@ -55,7 +55,9 @@ async def record_fixtures() -> None:
     settings = load_settings()
     store = FixtureStore(settings.fixtures_dir)
 
-    async with UpstreamClient(settings.upstream_url) as client:
+    async with UpstreamClient(
+        settings.upstream_url, timeout_s=settings.upstream_timeout_s
+    ) as client:
         print(f"Recording from {settings.upstream_url} into {settings.fixtures_dir}")
 
         print("initialize")

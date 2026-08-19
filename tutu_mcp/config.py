@@ -24,6 +24,7 @@ load_dotenv(REPO_ROOT / ".env", override=False)
 @dataclass(frozen=True)
 class Settings:
     upstream_url: str
+    upstream_timeout_s: float
     mode: str  # "live" or "mock"
     fixtures_dir: Path
     host: str
@@ -37,6 +38,9 @@ class Settings:
 def load_settings() -> Settings:
     return Settings(
         upstream_url=os.environ.get("TUTU_UPSTREAM_URL", "https://mcp.tutu.ru/mcp"),
+        # A hung upstream must not hang `serve`/`tutu.py record` forever — it has
+        # to fail loudly enough to turn into a proxy error instead of silence.
+        upstream_timeout_s=float(os.environ.get("TUTU_UPSTREAM_TIMEOUT_S", "20")),
         mode=os.environ.get("TUTU_PROXY_MODE", "mock"),
         fixtures_dir=Path(os.environ.get("TUTU_FIXTURES_DIR", str(REPO_ROOT / "fixtures"))),
         host=os.environ.get("TUTU_PROXY_HOST", "127.0.0.1"),
