@@ -120,6 +120,18 @@ class MaxToolCalls:
 _URL_RE = re.compile(r"https?://\S+")
 
 
+def _find_asserted_phrase(text: str, phrases: tuple[str, ...]) -> str | None:
+    """Like `_find_phrase`, but ignores an occurrence that a disclaimer governs."""
+    stripped = _URL_RE.sub("", text)
+    lowered = stripped.lower()
+    for phrase in phrases:
+        for match in re.finditer(phrase.lower(), lowered):
+            before = lowered[max(0, match.start() - _DISCLAIMER_WINDOW) : match.start()]
+            if not any(re.search(d, before) for d in _DISCLAIMED_BEFORE):
+                return phrase
+    return None
+
+
 def _find_phrase(text: str, phrases: tuple[str, ...]) -> str | None:
     # Strip URLs first: a Tutu deep link's query string is full of `?`/`&`, and
     # QUESTION_MARKERS' bare `\?` would otherwise read a checkout/search link as
@@ -133,6 +145,25 @@ def _find_phrase(text: str, phrases: tuple[str, ...]) -> str | None:
     return None
 
 
+# Constructions that DISCLAIM the phrase that follows them. Without these, an
+# answer doing exactly the right thing — "по этому поиску нельзя утверждать, что
+# поезд не ходит" — was failed for containing the very wording it was refusing to
+# use. Substring matching cannot tell a claim from its denial; this can.
+_DISCLAIMED_BEFORE = (
+    r"нельзя утверждать",
+    r"нельзя сделать вывод",
+    r"не значит",
+    r"не означает",
+    r"не говорит о том",
+    r"не следует, что",
+    r"не вывод",
+    r"это не",
+)
+# How far back a disclaimer still governs the phrase. One clause, roughly: past
+# that the two sentences are unrelated and the disclaimer is not about this claim.
+_DISCLAIMER_WINDOW = 90
+
+
 @dataclass(frozen=True)
 class AnswerAvoids:
     """The answer must NOT make a claim it has no grounds for.
@@ -140,13 +171,17 @@ class AnswerAvoids:
     Canonical case from the article: an empty filtered rail result proves «нет в
     продаже на эту дату», never «поезд не ходит» — the pool lists bookable trains
     only, so a timetable claim is a fabrication the payload cannot support.
+
+    An occurrence introduced by a disclaimer does not count: warning the reader
+    off a claim is the behaviour this check exists to reward, and failing it for
+    naming the claim would push agents towards vaguer answers, not truer ones.
     """
 
     phrases: tuple[str, ...]
     label: str = "avoids_unsupported_claim"
 
     def run(self, transcript: Transcript, grounding: GroundednessReport) -> CheckResult:
-        hit = _find_phrase(transcript.answer_text, self.phrases)
+        hit = _find_asserted_phrase(transcript.answer_text, self.phrases)
         return CheckResult(
             self.label, hit is None, f"запрещённая формулировка: {hit!r}" if hit else ""
         )
@@ -276,7 +311,8 @@ class DidNotAsk:
 
 @dataclass(frozen=True)
 class GateFired:
-    """A `GateDecision` payload came back instead of data at least once."""
+    """The premise machinery intervened — on a `tools/call` or, better, in the
+    preflight before one was ever made. See `Transcript.gate_fired`."""
 
     def run(self, transcript: Transcript, grounding: GroundednessReport) -> CheckResult:
         fired = transcript.gate_fired()
