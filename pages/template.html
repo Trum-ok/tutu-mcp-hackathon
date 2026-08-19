@@ -51,7 +51,7 @@ __STYLES__
   <h2><span class="num">01</span>Зачем это</h2>
   <p>
     Агент, подключённый к MCP-серверу Туту напрямую, платит две цены. Первая — размер:
-    <code>tools/list</code> отдаёт ~110&nbsp;КБ (~30K токенов) ещё до того, как пользователь что-то
+    <code>tools/list</code> отдаёт ~108&nbsp;КБ (~25K токенов) ещё до того, как пользователь что-то
     спросил. Вторая — доверие: агент отвечает связным текстом независимо от того, было ли значение
     в ответе сервера или он его достроил по общему знанию.
   </p>
@@ -88,7 +88,7 @@ __STYLES__
       <span class="chart-value">25&nbsp;269 токенов</span>
     </div>
   </div>
-  <p class="chart-caption"><i>−39&nbsp;%. Не оценка: цифру вернул сам провайдер в <code>usage</code> на пробном запросе с полной поверхностью инструментов (<code>gpt-5.6-luna</code>, 21.08.2026). Прокси против прямого подключения к mcp.tutu.ru, воспроизводится: <code>tutu.py evals</code>.</i></p>
+  <p class="chart-caption"><i>−39&nbsp;%. Не оценка: цифру вернул сам провайдер в <code>usage</code> на пробном запросе с полной поверхностью инструментов (<code>gpt-5.6-luna</code>, 19.08.2026, каталог из <code>fixtures/</code>). Прокси против прямого подключения к mcp.tutu.ru, воспроизводится: <code>tutu.py evals</code>.</i></p>
 
   <div class="cards">
     <div class="card">
@@ -215,7 +215,7 @@ uv run python tutu.py serve           <span class="cmt"># http://127.0.0.1:8800/
   <span class="key">"user_request"</span>: <span class="str">"Хочу в субботу 11 октября съездить из Москвы в Питер и вернуться вечером"</span>,
   <span class="key">"planned_calls"</span>: [
     { <span class="key">"tool"</span>: <span class="str">"search_rail"</span>,
-      <span class="key">"arguments"</span>: { <span class="key">"from"</span>: <span class="str">"Москва"</span>, <span class="key">"to"</span>: <span class="str">"Санкт-Петербург"</span>, <span class="key">"date"</span>: <span class="str">"2026-10-11"</span> } }
+      <span class="key">"arguments"</span>: { <span class="key">"origin"</span>: <span class="str">"Москва"</span>, <span class="key">"destination"</span>: <span class="str">"Санкт-Петербург"</span>, <span class="key">"departure_date"</span>: <span class="str">"2026-10-11"</span> } }
   ]
 }</code></pre>
   <p>В ответ приходит: какие параметры <b>блокирующие</b>, какие — безопасные умолчания, и есть ли противоречие внутри самого запроса. Вердикт <code>ask_user_first</code> означает: спросить пользователя <i>до</i> дорогих поисков, а не после того, как таблица уже построена на догадке.</p>
@@ -265,6 +265,7 @@ uv run python tutu.py serve           <span class="cmt"># http://127.0.0.1:8800/
     <tr><td><span class="chip confirmed">confirmed</span></td><td>Значение найдено в ответе сервера</td></tr>
     <tr><td><span class="chip assumed">assumed</span></td><td>Пришло из объявленного допущения — раскрыто, но не доказано</td></tr>
     <tr><td><span class="chip unavailable">unavailable</span></td><td>В данных его нет. Это то, что иначе ушло бы пользователю как факт</td></tr>
+    <tr><td><span class="chip user_stated">user_stated</span></td><td>Условие назвал сам пользователь — ответ его цитирует. Не доказательство, но и не выдумка, поэтому отдельно от <code>unavailable</code></td></tr>
   </table>
   <div class="note">
     <b>Допущения агент не может спрятать.</b> Список допущений <code>check_groundedness</code>
@@ -413,7 +414,7 @@ make docs          <span class="cmt"># эта страница, site/index.html<
       исходной статье. Механизм общий, покрытие — нет.</li>
     <li><b><code>create_checkout_link</code> намеренно не тронут.</b> Это диспетчер покупки, и у
       него нет парного instructions-инструмента, куда переложить прозу.</li>
-    <li><b>Плата за сжатие названа.</b> <code>get_rail_instructions</code> растёт с 27,5 КБ до 50,3 КБ —
+    <li><b>Плата за сжатие названа.</b> <code>get_rail_instructions</code> растёт с 26,8 КБ до 50,3 КБ —
       её платит только та сессия, которая его вызвала, вместо всех сессий до первого поиска.</li>
     <li><b>Нет фикстуры на 429.</b> Спровоцировать её означало бы сжечь общий рейт-лимит хакатона
       всем остальным командам.</li>

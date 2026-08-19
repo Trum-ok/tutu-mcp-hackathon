@@ -440,6 +440,11 @@ td code {
   border-color: var(--unavailable);
   background: var(--unavailable-bg);
 }
+.chip.user_stated {
+  color: var(--user-stated);
+  border-color: var(--user-stated);
+  background: var(--user-stated-bg);
+}
 
 .cards {
   display: grid;
