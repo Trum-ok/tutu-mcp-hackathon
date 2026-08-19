@@ -120,6 +120,10 @@ class ChatCompletionsAgent:
     effort: str | None = None
     max_turns: int = MAX_TURNS
     max_completion_tokens: int = 16000
+    # The only seam between these loops and the network. Overridden in tests to
+    # drive the refusal / length-cap / bad-arguments branches, which no fixture can
+    # produce because they are the model misbehaving, not the tools.
+    client_factory: Callable[[], Any] = make_client
 
     @property
     def label(self) -> str:
@@ -141,7 +145,7 @@ class ChatCompletionsAgent:
         server_instructions: str,
         execute: ToolExecutor,
     ) -> Transcript:
-        client = make_client()
+        client = self.client_factory()
         transcript = Transcript(scenario_id=scenario_id, variant=variant)
         started = time.monotonic()
 
@@ -222,6 +226,7 @@ class ResponsesAgent:
     effort: str | None = None
     max_turns: int = MAX_TURNS
     max_output_tokens: int = 16000
+    client_factory: Callable[[], Any] = make_client
 
     @property
     def label(self) -> str:
@@ -246,7 +251,7 @@ class ResponsesAgent:
         server_instructions: str,
         execute: ToolExecutor,
     ) -> Transcript:
-        client = make_client()
+        client = self.client_factory()
         transcript = Transcript(scenario_id=scenario_id, variant=variant)
         started = time.monotonic()
 
