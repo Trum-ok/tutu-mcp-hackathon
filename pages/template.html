@@ -79,16 +79,34 @@ __STYLES__
   <div class="chart">
     <div class="chart-row">
       <span class="chart-label">Прокси</span>
-      <span class="chart-bar proxy" style="width:212px"></span>
-      <span class="chart-value">~<b>19&nbsp;398</b> токенов</span>
+      <span class="chart-bar proxy" style="width:195px"></span>
+      <span class="chart-value"><b>15&nbsp;364</b> токена</span>
     </div>
     <div class="chart-row">
       <span class="chart-label">Без прокси</span>
       <span class="chart-bar" style="width:320px"></span>
-      <span class="chart-value">~29&nbsp;329 токенов</span>
+      <span class="chart-value">25&nbsp;269 токенов</span>
     </div>
   </div>
-  <p class="chart-caption"><i>Оценка tiktoken, не точный подсчёт провайдера (см. <a href="#faq">раздел 07</a>) — −34&nbsp;%. Прокси против прямого подключения к mcp.tutu.ru, воспроизводится: <code>make demo-traces</code>.</i></p>
+  <p class="chart-caption"><i>−39&nbsp;%. Не оценка: цифру вернул сам провайдер в <code>usage</code> на пробном запросе с полной поверхностью инструментов (<code>gpt-5.6-luna</code>, 21.08.2026). Прокси против прямого подключения к mcp.tutu.ru, воспроизводится: <code>tutu.py evals</code>.</i></p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="k">Задачный успех</div>
+      <div class="v">19–21<span style="opacity:.5">/22</span></div>
+      <div class="d">Против 17–18 из 22 без прокси. Четыре прогона по 22 сценария, <code>gpt-5.6-luna</code>; диапазон — разброс самой модели, бэкенд и сценарии одни и те же.</div>
+    </div>
+    <div class="card">
+      <div class="k">Обоснованность</div>
+      <div class="v">99&nbsp;%</div>
+      <div class="d">Доля утверждений в ответе, которые нашлись в сыром <code>tool_result</code>. Без прокси — 97–98&nbsp;%.</div>
+    </div>
+    <div class="card">
+      <div class="k">Лишних вопросов</div>
+      <div class="v">0</div>
+      <div class="d">Гейт вмешался 8–12 раз за прогон и ни разу не переспросил там, где всё было определено. Механизм, уточняющий всё подряд, набрал бы идеальные метрики и испортил бы продукт.</div>
+    </div>
+  </div>
 
   <h4>Что именно ужимается</h4>
   <p>
