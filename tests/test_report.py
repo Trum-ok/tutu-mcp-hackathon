@@ -28,7 +28,9 @@ METRIC_KEYS = {
     "success_rate",
     "groundedness_rate",
     "total_claims",
+    "checkable_claims",
     "grounded_claims",
+    "fabricated_claims",
     "tool_calls",
     "tool_errors",
     "fixture_misses",
@@ -195,3 +197,27 @@ def test_the_self_check_verdict_shows_what_diverged(planned_run):
 
     assert "Разошлось вердиктов: 1" in out
     assert broken.scenario.id in out
+
+
+def test_fabrications_are_counted_apart_from_the_rate(planned_run):
+    """Процент прячет то, что доходит до пользователя: 4 выдумки из 191 утверждения
+    и 1 из 185 — это 96,9 % против 98,9 %, разрыв читается как шум, хотя неверных
+    фактов вчетверо больше."""
+    summaries = {s.variant: s for s in planned_run.summaries}
+    fabricated = {name: s.fabricated_claims for name, s in summaries.items()}
+
+    assert sum(fabricated.values()) > 0, "в планах есть заведомо выдуманные значения"
+    for name, summary in summaries.items():
+        counted = sum(1 for r in summary.results for c in r.grounding.checks if c.fabricated)
+        assert fabricated[name] == counted
+
+
+def test_the_rate_ignores_what_the_user_said_themselves(planned_run):
+    """Знаменатель — только те утверждения, которые payload в принципе мог
+    подтвердить. Порог из запроса пользователя туда не входит, иначе одна и та же
+    величина считалась бы здесь и в отчёте сценария по-разному."""
+    for summary in planned_run.summaries:
+        user_stated = sum(
+            1 for r in summary.results for c in r.grounding.checks if c.status == "user_stated"
+        )
+        assert summary.checkable_claims == summary.total_claims - user_stated

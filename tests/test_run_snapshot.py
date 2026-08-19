@@ -60,3 +60,15 @@ def test_every_trace_has_something_to_show(snapshot):
             assert scenario["answer"] or scenario["failure"], (
                 f"{variant['variant']}/{scenario['id']}: ни ответа, ни причины сбоя"
             )
+
+
+def test_the_snapshot_carries_the_metrics_the_viewer_reads(snapshot):
+    """A snapshot written by an older report renders as "Выдумано 0" — the viewer
+    falls back rather than crashing, which is worse: a wrong number looks fine."""
+    for variant in snapshot["variants"]:
+        metrics = variant["metrics"]
+        claims = [c for s in variant["scenarios"] for c in s["groundedness"]["claims"]]
+        assert metrics["fabricated_claims"] == sum(
+            1 for c in claims if c["status"] == "unavailable"
+        )
+        assert metrics["checkable_claims"] == sum(1 for c in claims if c["status"] != "user_stated")

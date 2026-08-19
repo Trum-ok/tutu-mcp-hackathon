@@ -67,14 +67,32 @@ class VariantSummary:
         return sum(len(r.grounding.checks) for r in self.results)
 
     @property
+    def checkable_claims(self) -> int:
+        """Claims a payload could confirm — everything except a threshold the user
+        named themselves. Matches `GroundednessReport.checkable`, which the same
+        exclusion applies per scenario; dividing by different denominators here and
+        there meant two numbers about one thing that never quite agreed."""
+        return sum(len(r.grounding.checkable) for r in self.results)
+
+    @property
     def grounded_claims(self) -> int:
         return sum(sum(1 for c in r.grounding.checks if c.grounded) for r in self.results)
+
+    @property
+    def fabricated_claims(self) -> int:
+        """Values that came from nowhere — the count that actually reaches a user.
+
+        Reported next to the rate because a percentage hides it: 4 fabrications out
+        of 191 claims and 1 out of 185 are 96.9% and 98.9%, a gap that reads as
+        noise while being a fourfold difference in wrong facts told.
+        """
+        return sum(len(r.grounding.fabricated) for r in self.results)
 
     @property
     def groundedness_rate(self) -> float | None:
         """Pooled over all claims, not averaged over scenarios — a scenario making
         twenty claims should weigh more than one making a single claim."""
-        return self.grounded_claims / self.total_claims if self.total_claims else None
+        return self.grounded_claims / self.checkable_claims if self.checkable_claims else None
 
     @property
     def tool_calls(self) -> int:

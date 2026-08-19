@@ -166,6 +166,11 @@ function renderVerdict() {
       ? Math.round((m.groundedness_rate - bm.groundedness_rate) * 100)
       : null;
   const successDelta = bm ? m.successes - bm.successes : null;
+  // Fewer is better here, so the sign is flipped for the shared `delta` renderer.
+  const fabricatedDelta =
+    bm && m.fabricated_claims != null && bm.fabricated_claims != null
+      ? bm.fabricated_claims - m.fabricated_claims
+      : null;
 
   const cards = [
     {
@@ -177,8 +182,17 @@ function renderVerdict() {
     {
       k: 'Groundedness',
       v: pct(m.groundedness_rate),
-      d: `<div class="d">${m.grounded_claims}/${m.total_claims} ${plural(m.total_claims, ['утверждение', 'утверждения', 'утверждений'])}</div>
+      d: `<div class="d">${m.grounded_claims}/${m.checkable_claims ?? m.total_claims} ${plural(m.checkable_claims ?? m.total_claims, ['утверждение', 'утверждения', 'утверждений'])}</div>
           ${delta(groundedDelta, isBase, ' пп')}`,
+    },
+    {
+      // The percentage hides this: 4 fabrications out of 191 claims vs 1 out of 185
+      // is a fourfold difference that reads as two points. The count is what a user
+      // actually receives as wrong facts.
+      k: 'Выдумано',
+      v: `${m.fabricated_claims ?? 0}`,
+      d: `<div class="d">значений, которых нет в ответах сервера</div>
+          ${delta(fabricatedDelta, isBase, '')}`,
     },
     {
       k: 'Задач решено',

@@ -56,7 +56,7 @@ def render_console(run: EvalRun) -> str:
 
     add("\n=== Метрики по вариантам ===")
     header = (
-        f"  {'вариант':<12} {'успех':>10} {'grounded':>10} {'вызовы':>8} "
+        f"  {'вариант':<12} {'успех':>10} {'grounded':>10} {'выдумано':>9} {'вызовы':>8} "
         f"{'ошибки':>8} {'промахи':>9} {'in tok':>9} {'out tok':>9} {'p50 с':>7} {'p95 с':>7}"
     )
     add(header)
@@ -65,6 +65,7 @@ def render_console(run: EvalRun) -> str:
             f"  {summary.variant:<12} "
             f"{f'{summary.successes}/{summary.total}':>10} "
             f"{_pct(summary.groundedness_rate):>10} "
+            f"{summary.fabricated_claims:>9} "
             f"{summary.tool_calls:>8} "
             f"{summary.tool_errors:>8} "
             f"{summary.fixture_misses:>9} "
@@ -83,6 +84,10 @@ def render_console(run: EvalRun) -> str:
         add(
             f"    groundedness   "
             f"{_delta(base.groundedness_rate, other.groundedness_rate, higher_is_better=True)}"
+        )
+        add(
+            f"    выдуманных утв. "
+            f"{_delta_int(base.fabricated_claims, other.fabricated_claims, higher_is_better=False)}"
         )
         add(
             f"    вызовов тулов  {_delta_int(base.tool_calls, other.tool_calls, higher_is_better=False)}"
@@ -234,7 +239,9 @@ def _summary_json(summary: VariantSummary) -> dict[str, Any]:
             "success_rate": summary.success_rate,
             "groundedness_rate": summary.groundedness_rate,
             "total_claims": summary.total_claims,
+            "checkable_claims": summary.checkable_claims,
             "grounded_claims": summary.grounded_claims,
+            "fabricated_claims": summary.fabricated_claims,
             "tool_calls": summary.tool_calls,
             "tool_errors": summary.tool_errors,
             "fixture_misses": summary.fixture_misses,
