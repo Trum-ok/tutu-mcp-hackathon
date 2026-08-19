@@ -28,13 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # `enablement` включает Pages через API, если он ещё не включён в
-      # настройках репозитория, — иначе первый прогон падает на 404 «Get Pages
-      # site failed». Шаг стоит до сборки: незачем собирать сайт, которому
-      # некуда деплоиться.
+      # Стоит до сборки: если Pages в репозитории не включён (Settings ->
+      # Pages -> Source: GitHub Actions), прогон падает здесь, а не после
+      # установки зависимостей и генерации сайта. Включить автоматически
+      # нельзя: GITHUB_TOKEN не имеет прав на создание Pages-сайта.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
