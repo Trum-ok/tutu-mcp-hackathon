@@ -96,11 +96,7 @@ class VariantSummary:
     @property
     def gate_fires(self) -> int:
         """Scenarios where the proxy answered a question instead of data at least once."""
-        return sum(
-            1
-            for r in self.results
-            if any("clarification_required" in c.result_text for c in r.transcript.tool_calls)
-        )
+        return sum(1 for r in self.results if r.transcript.gate_fired())
 
     @property
     def runs_with_assumptions(self) -> int:

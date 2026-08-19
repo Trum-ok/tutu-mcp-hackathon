@@ -111,8 +111,16 @@ class MaxToolCalls:
         return CheckResult(f"max_{self.limit}_tool_calls", n <= self.limit, f"вызовов: {n}")
 
 
+_URL_RE = re.compile(r"https?://\S+")
+
+
 def _find_phrase(text: str, phrases: tuple[str, ...]) -> str | None:
-    lowered = text.lower()
+    # Strip URLs first: a Tutu deep link's query string is full of `?`/`&`, and
+    # QUESTION_MARKERS' bare `\?` would otherwise read a checkout/search link as
+    # a clarifying question — wrongly passing ClarifiedBeforeSearch on an answer
+    # that never asked anything, and wrongly failing DidNotAsk on one that did.
+    stripped = _URL_RE.sub("", text)
+    lowered = stripped.lower()
     for phrase in phrases:
         if re.search(phrase.lower(), lowered):
             return phrase
@@ -262,10 +270,10 @@ class DidNotAsk:
 
 @dataclass(frozen=True)
 class GateFired:
-    """A `clarification_required` payload came back instead of data at least once."""
+    """A `GateDecision` payload came back instead of data at least once."""
 
     def run(self, transcript: Transcript, grounding: GroundednessReport) -> CheckResult:
-        fired = any("clarification_required" in c.result_text for c in transcript.tool_calls)
+        fired = transcript.gate_fired()
         return CheckResult("premise_gate_fired", fired, "" if fired else "гейт не сработал")
 
 

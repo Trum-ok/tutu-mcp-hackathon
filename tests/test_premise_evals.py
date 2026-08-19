@@ -186,3 +186,16 @@ async def test_assess_request_is_absent_from_the_baseline_surface(backend, repo_
 
     assert "assess_request" not in {t["name"] for t in baseline.tools}
     assert "assess_request" in {t["name"] for t in proxy.tools}
+
+
+@pytest.mark.parametrize("tool", ["assess_request", "check_groundedness"])
+async def test_control_tools_refuse_calls_on_the_baseline_surface(backend, repo_fixtures, tool):
+    """Neither control tool is on baseline's `tools/list` — a baseline agent that
+    calls one anyway (or a judge probing the surface) must not get a real answer
+    out of it, or the comparison would secretly hand baseline proxy-only behavior."""
+    baseline = await _variant(backend, repo_fixtures, BASELINE)
+
+    result = await baseline.execute(tool, {})
+
+    assert result.is_error is True
+    assert result.result_text == f"unknown tool: {tool}"

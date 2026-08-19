@@ -8,6 +8,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from tutu_mcp.premises import GATE_STATUS
+
 
 @dataclass(frozen=True)
 class ToolCallRecord:
@@ -56,10 +58,30 @@ class Transcript:
     def tool_names(self) -> list[str]:
         return [c.name for c in self.tool_calls]
 
+    def gate_fired(self) -> bool:
+        """A `GateDecision` payload came back instead of data at least once —
+        the premise gate asked a clarifying question rather than letting an
+        invented value through. Checks the parsed `status` field rather than
+        substring-matching `result_text`, so an unrelated result that happens
+        to quote the same words (an echoed error, a translated answer) can't
+        register as a fired gate."""
+        return any(
+            isinstance(parsed := c.parsed_result(), dict) and parsed.get("status") == GATE_STATUS
+            for c in self.tool_calls
+        )
+
     def result_payloads(self) -> list[Any]:
-        """Every successfully parsed tool_result payload — the grounding evidence set."""
+        """Every successfully parsed tool_result payload — the grounding evidence set.
+
+        Skips `is_error` calls: an error payload (e.g. the JSON status/tool/error
+        our own error handling emits) can happen to contain the exact numbers or
+        codes an agent invented, which would "confirm" a fabricated claim built
+        on a call that never actually returned data.
+        """
         payloads = []
         for call in self.tool_calls:
+            if call.is_error:
+                continue
             parsed = call.parsed_result()
             if parsed is not None:
                 payloads.append(parsed)
