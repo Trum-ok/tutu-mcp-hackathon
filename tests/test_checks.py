@@ -104,3 +104,25 @@ def test_a_disclaimer_far_away_does_not_license_a_later_claim():
     )
 
     assert not result.passed
+
+
+def test_the_missing_field_scenario_asks_about_something_actually_missing():
+    """Guards the scenario against the fixture set drifting under it: the whole
+    point is that the server did not return the field, so if a recording ever
+    starts carrying it, this scenario silently stops testing anything."""
+    import json
+    from pathlib import Path
+
+    from evals.scenarios import SCENARIOS_BY_ID
+
+    request = SCENARIOS_BY_ID["hotels_missing_field"].request.lower()
+    asked = [word for word in ("заезд", "парковк") if word in request]
+    assert asked, "сценарий должен спрашивать про поля, перечисленные здесь"
+
+    fixtures = Path("fixtures/search_hotels").glob("*.json")
+    for path in fixtures:
+        text = json.loads(path.read_text(encoding="utf-8"))["result"]["text"].lower()
+        for word in asked:
+            assert word not in text, (
+                f"{path.name} содержит «{word}» — сценарий больше не про пробел"
+            )
