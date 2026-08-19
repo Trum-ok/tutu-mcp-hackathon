@@ -5,7 +5,7 @@ import pytest
 
 from evals.config import InvalidEffortError, openai_effort_default
 from evals.options import AgentKind, Api, Effort, EvalOptions
-from evals.run import build_agent
+from evals.run import build_agent, build_token_counter
 
 
 def test_unset_effort_leaves_the_choice_to_the_model(monkeypatch):
@@ -54,3 +54,32 @@ def test_the_whole_effort_scale_is_accepted(monkeypatch):
     for effort in Effort:
         monkeypatch.setenv("OPENAI_EFFORT", effort.value)
         assert openai_effort_default() is effort
+
+
+@pytest.mark.parametrize(
+    "opts, expected",
+    [
+        (EvalOptions(estimate_tokens=True), "--estimate-tokens"),
+        (EvalOptions(agent=AgentKind.SCRIPTED), "scripted"),
+    ],
+)
+def test_an_estimate_says_which_of_its_causes_applied(opts, expected):
+    """The old message blamed a missing key unconditionally, sending readers to
+    hunt for a key that was sitting right there in .env."""
+    counter = build_token_counter(opts, "gpt-5", has_key=True)
+
+    assert not counter.exact
+    assert expected in (counter.estimate_reason or "")
+
+
+def test_a_missing_key_is_still_named_as_the_cause():
+    counter = build_token_counter(EvalOptions(), "gpt-5", has_key=False)
+
+    assert counter.estimate_reason == "нет ключа OpenAI"
+
+
+def test_an_exact_counter_has_no_reason_to_give():
+    counter = build_token_counter(EvalOptions(), "gpt-5", has_key=True)
+
+    assert counter.exact
+    assert counter.estimate_reason is None

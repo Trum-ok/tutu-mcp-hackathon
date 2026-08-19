@@ -14,6 +14,7 @@ implement Chat Completions almost universally and `/v1/responses` rarely — one
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -302,17 +303,40 @@ class ResponsesAgent:
         return transcript
 
 
+Plan = tuple[list[tuple[str, dict[str, Any]]], str]
+
+
+def by_scenario(scenario_id: str, variant: str) -> Any:
+    return scenario_id
+
+
+def by_scenario_and_variant(scenario_id: str, variant: str) -> Any:
+    return (scenario_id, variant)
+
+
 @dataclass
 class ScriptedAgent:
     """Test double: replays a fixed plan so the harness itself can be tested offline.
 
-    `plan` maps scenario id -> (tool calls to make, answer text). A test can build
-    an answer from real fixture values to produce a genuinely grounded answer, or
-    from invented ones to produce a genuinely fabricated one.
+    `plan` maps a key -> (tool calls to make, answer text). A test can build an
+    answer from real fixture values to produce a genuinely grounded answer, or from
+    invented ones to produce a genuinely fabricated one.
+
+    `key` picks what the plan is keyed on. `by_scenario` is the test default;
+    `evals/demo.py` passes `by_scenario_and_variant`, so one scenario can show a
+    good answer on one surface and a bad one on the other — which is the whole
+    point of a side-by-side trace viewer. That single difference used to justify a
+    second class with a byte-for-byte copy of the loop below.
+
+    `tokens` supplies synthetic (input, output) counts per variant for hand-written
+    traces, where no model ran and the report still needs a plausible column. Left
+    unset, the counts stay zero — a scripted run must not look like a measurement.
     """
 
-    plan: dict[str, tuple[list[tuple[str, dict[str, Any]]], str]]
+    plan: dict[Any, Plan]
     label_: str = "scripted"
+    key: Callable[[str, str], Any] = by_scenario
+    tokens: Callable[[str], tuple[int, int]] | None = None
 
     @property
     def label(self) -> str:
@@ -331,11 +355,13 @@ class ScriptedAgent:
         transcript = Transcript(scenario_id=scenario_id, variant=variant)
         started = time.monotonic()
 
-        calls, answer = self.plan.get(scenario_id, ([], ""))
+        calls, answer = self.plan.get(self.key(scenario_id, variant), ([], ""))
         for name, arguments in calls:
-            record = await execute(name, arguments)
+            record = await execute(name, dict(arguments))
             transcript.tool_calls.append(record)
         transcript.turns = len(calls) + 1
         transcript.answer_text = answer
+        if self.tokens is not None:
+            transcript.input_tokens, transcript.output_tokens = self.tokens(variant)
         transcript.duration_s = time.monotonic() - started
         return transcript

@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from tutu_mcp.groundedness import GroundednessReport, check_groundedness
@@ -9,6 +10,7 @@ from tutu_mcp.premises import SessionPremises
 
 from .agent import Agent
 from .checks import CheckResult
+from .options import Api
 from .scenarios import Scenario
 from .tokens import SurfaceCost, TokenCounter, measure_surface
 from .transcript import Transcript
@@ -147,6 +149,8 @@ class EvalRun:
     agent_label: str
     summaries: list[VariantSummary]
     surface_exact: bool
+    # why the surface figures are estimates, when they are; `None` when exact
+    surface_estimate_reason: str | None = None
 
     def by_variant(self, name: str) -> VariantSummary | None:
         return next((s for s in self.summaries if s.variant == name), None)
@@ -160,6 +164,10 @@ def evaluate(
         transcript.result_payloads(),
         assumed_values=premises.assumed_values() if premises else None,
         assumptions=premises.assumption_lines() if premises else None,
+        # Taken from the scenario, not from the session: baseline has no session,
+        # and sourcing this differently per variant would hand one of them an
+        # advantage that has nothing to do with what is being measured.
+        user_request=scenario.request,
     )
     checks = [c.run(transcript, grounding) for c in scenario.checks]
     return ScenarioResult(
@@ -193,8 +201,8 @@ async def run_eval(
     variants: list[Variant],
     token_counter: TokenCounter,
     concurrency: int = 1,
-    on_result=None,
-    api: str = "responses",
+    on_result: Callable[[ScenarioResult], None] | None = None,
+    api: Api = Api.RESPONSES,
 ) -> EvalRun:
     """`concurrency` stays at 1 by default: against the live upstream the rate limit
     is shared with every other hackathon team, and against fixtures the run is fast
@@ -222,4 +230,9 @@ async def run_eval(
             VariantSummary(variant=variant.name, results=list(results), surface=surface)
         )
 
-    return EvalRun(agent_label=agent.label, summaries=summaries, surface_exact=token_counter.exact)
+    return EvalRun(
+        agent_label=agent.label,
+        summaries=summaries,
+        surface_exact=token_counter.exact,
+        surface_estimate_reason=token_counter.estimate_reason,
+    )

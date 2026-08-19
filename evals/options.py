@@ -25,6 +25,11 @@ PROXY = "proxy"
 VARIANT_NAMES = (BASELINE, PROXY)
 
 
+# Named so the self-check can tell «пользователь оставил умолчание» apart from
+# «пользователь выбрал путь» and redirect only the former — see `evals/run.py`.
+DEFAULT_OUT = Path("out/eval-results.json")
+
+
 class SelectionError(ValueError):
     """A `--scenarios` / `--domains` / `--variants` value the harness cannot honor.
 
@@ -87,5 +92,5 @@ class EvalOptions:
     scenarios: tuple[str, ...] | None = None
     domains: tuple[str, ...] | None = None
     concurrency: int = 1
-    out: Path = Path("out/eval-results.json")
+    out: Path = DEFAULT_OUT
     estimate_tokens: bool = False

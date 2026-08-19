@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from .plans import Mismatch, self_check_verdicts
 from .runner import EvalRun, ScenarioResult, VariantSummary
 
 
@@ -38,7 +39,8 @@ def render_console(run: EvalRun) -> str:
 
     add("\n=== Стоимость поверхности инструментов (до первого поиска) ===")
     if not run.surface_exact:
-        add("  ⚠ токены оценены офлайн (tiktoken) — точный замер требует ключа OpenAI")
+        why = run.surface_estimate_reason or "точный замер отключён"
+        add(f"  ⚠ токены оценены офлайн (tiktoken): {why}")
     add(f"  {'вариант':<12} {'токены':>10} {'байты':>10}")
     base_surface = None
     for summary in run.summaries:
@@ -162,6 +164,57 @@ def _render_failures(run: EvalRun) -> str:
     return "\n".join(lines)
 
 
+def _verdict(names: frozenset[str]) -> str:
+    return ", ".join(sorted(names)) if names else "все проверки пройдены"
+
+
+def render_self_check(run: EvalRun, mismatches: list[Mismatch]) -> str:
+    """The verdict of `--agent scripted`: did the harness judge the fixed plans the
+    way `evals/plans.py` says it must.
+
+    Rendered apart from the metrics above on purpose. Half of those plans are
+    written to fail — a fabricated price, a rebuilt link, an invented room area —
+    so «провалов: 3» up there is the expected reading, and the only line that says
+    whether anything is wrong is the one below.
+    """
+    lines = ["\n=== Самопроверка харнесса ==="]
+    add = lines.append
+    add(
+        "  Ответы рукописные и неизменные (evals/plans.py), поэтому провалы baseline выше —\n"
+        "  запланированные. Сверяется не успех, а совпадение вердикта с ожидаемым."
+    )
+
+    verdicts = self_check_verdicts(run)
+    bad = {(m.scenario_id, m.variant) for m in mismatches}
+    for scenario_id, variant, expected, _ in verdicts:
+        broken = (scenario_id, variant) in bad
+        mark = "✗" if broken else "✓"
+        note = "разошлось, подробности ниже" if broken else _verdict(expected)
+        add(f"  {mark} {variant:<9} {scenario_id:<28} {note}")
+
+    for mismatch in mismatches:
+        add(f"\n  ✗ {mismatch.variant} {mismatch.scenario_id}")
+        if mismatch.failure:
+            add(f"      прогон не завершился: {mismatch.failure}")
+        add(f"      ожидалось: {_verdict(mismatch.expected)}")
+        add(f"      получено:  {_verdict(mismatch.actual)}")
+
+    if not verdicts:
+        add("\n  Ни одна пара из плана не прогонялась — проверять было нечего.")
+    elif mismatches:
+        add(
+            f"\n  Разошлось вердиктов: {len(mismatches)} из {len(verdicts)}. Харнесс судит эти "
+            "ответы иначе,\n  чем когда план писали, — почините проверку или обновите ожидание "
+            "в evals/plans.py."
+        )
+    else:
+        add(
+            f"\n  Совпало вердиктов: {len(verdicts)} из {len(verdicts)}. На настоящих фикстурах "
+            "харнесс по-прежнему\n  отличает обоснованный ответ от выдуманного — обвязка исправна."
+        )
+    return "\n".join(lines)
+
+
 def to_json(run: EvalRun) -> dict[str, Any]:
     """Full dump — the trace viewer reads this, so it keeps the per-call detail."""
     return {
@@ -217,10 +270,11 @@ def _result_json(result: ScenarioResult) -> dict[str, Any]:
         "checks": [{"name": c.name, "passed": c.passed, "detail": c.detail} for c in result.checks],
         "groundedness": {
             "rate": result.grounding.rate,
-            # `status` is the three-state verdict the trace viewer paints:
-            # confirmed / assumed / unavailable. `grounded` stays alongside it as
-            # the binary roll-up — an assumption is disclosed, not proven, so it
-            # must not read as green.
+            # `status` is the four-state verdict the trace viewer paints:
+            # confirmed / assumed / user_stated / unavailable. `grounded` stays
+            # alongside it as the binary roll-up — an assumption is disclosed, not
+            # proven, and a quoted threshold is the request restated, so neither
+            # may read as green.
             "claims": [
                 {
                     "kind": c.claim.kind,

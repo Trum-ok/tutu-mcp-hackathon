@@ -14,8 +14,10 @@ from evals import report as report_mod
 from evals.agent import (
     Agent,
     ChatCompletionsAgent,
+    Plan,
     ResponsesAgent,
     ScriptedAgent,
+    by_scenario_and_variant,
     make_client,
 )
 from evals.config import (
@@ -25,7 +27,23 @@ from evals.config import (
     openai_effort_default,
     openai_model_default,
 )
-from evals.options import AgentKind, Api, Effort, EvalOptions, SelectionError, check_variants
+from evals.options import (
+    DEFAULT_OUT,
+    AgentKind,
+    Api,
+    Effort,
+    EvalOptions,
+    SelectionError,
+    check_variants,
+)
+from evals.plans import (
+    PLANNED_IDS,
+    SELF_CHECK_LABEL,
+    SELF_CHECK_OUT,
+    build_plans,
+    self_check_mismatches,
+    self_check_verdicts,
+)
 from evals.runner import ScenarioResult, run_eval
 from evals.scenarios import select
 from evals.tokens import (
@@ -38,22 +56,42 @@ from evals.variants import build_variants
 from tutu_mcp.backends import backend_for
 from tutu_mcp.config import load_settings
 from tutu_mcp.replay.recording import RecordingBackend
+from tutu_mcp.replay.store import FixtureStore
 
 
-def build_agent(opts: EvalOptions, model: str, effort: Effort | None) -> Agent:
+def build_agent(
+    opts: EvalOptions,
+    model: str,
+    effort: Effort | None,
+    *,
+    plans: dict[tuple[str, str], Plan] | None = None,
+) -> Agent:
     if opts.agent is AgentKind.SCRIPTED:
-        # Empty plan: every scenario runs with no tool calls and an empty answer.
-        # Useful only to prove the harness wiring end to end, never as a measurement.
-        return ScriptedAgent(plan={})
+        # Never an empty plan. With nothing to replay every scenario ends with no
+        # tool calls and an empty answer — every check fails, which is exactly what
+        # a genuinely broken harness looks like, so the run proves nothing. The
+        # hand-written plans give it something to be right or wrong about.
+        assert plans, "scripted agent needs the self-check plans from evals/plans.py"
+        return ScriptedAgent(plan=plans, label_=SELF_CHECK_LABEL, key=by_scenario_and_variant)
     value = effort.value if effort else None
     if opts.api is Api.CHAT:
         return ChatCompletionsAgent(model=model, effort=value)
     return ResponsesAgent(model=model, effort=value)
 
 
-def build_token_counter(opts: EvalOptions, model: str) -> TokenCounter:
-    if opts.estimate_tokens or opts.agent is AgentKind.SCRIPTED:
-        return OfflineTokenCounter(model=model, api=opts.api.value)
+def build_token_counter(opts: EvalOptions, model: str, *, has_key: bool = True) -> TokenCounter:
+    # The reason travels with the counter so the report can state it. Ordered by
+    # what the reader can act on: a flag they passed, an agent they chose, a key
+    # they are missing.
+    reason = None
+    if opts.estimate_tokens:
+        reason = "запрошено флагом --estimate-tokens"
+    elif opts.agent is AgentKind.SCRIPTED:
+        reason = "агент scripted не обращается к API"
+    elif not has_key:
+        reason = "нет ключа OpenAI"
+    if reason is not None:
+        return OfflineTokenCounter(model=model, api=opts.api, reason=reason)
     # Must be the same endpoint the agent runs on — see ResponsesApiTokenCounter.
     if opts.api is Api.CHAT:
         return ChatApiTokenCounter(model=model)
@@ -85,13 +123,27 @@ async def run_evals(opts: EvalOptions) -> int:
     settings = load_settings()
     credentials = openai_credentials_source()
 
+    # The self-check runs exactly the scenarios `evals/plans.py` has plans for.
+    # Narrowing that set would quietly shrink what the run proves, so a selection
+    # flag is rejected rather than ignored.
+    self_check = opts.agent is AgentKind.SCRIPTED
+    if self_check and (opts.scenarios or opts.domains):
+        print(
+            "--agent scripted прогоняет фиксированный набор самопроверки "
+            f"({', '.join(PLANNED_IDS)}) — только для этих сценариев написаны планы, "
+            "так что --scenarios/--domains с ним не сочетаются.",
+            file=sys.stderr,
+        )
+        return 2
+    ids = PLANNED_IDS if self_check else opts.scenarios
+
     # Both checks run before anything is built or connected: a typo in a flag
     # must not cost an upstream request, and an empty selection must not produce
     # a report that looks like a clean run.
     try:
         check_variants(opts.variants)
         scenarios = select(
-            ids=list(opts.scenarios) if opts.scenarios else None,
+            ids=list(ids) if ids else None,
             domains=list(opts.domains) if opts.domains else None,
         )
     except SelectionError as exc:
@@ -110,8 +162,9 @@ async def run_evals(opts: EvalOptions) -> int:
     except InvalidEffortError as exc:
         print(exc, file=sys.stderr)
         return 2
-    agent = build_agent(opts, model, effort)
-    counter = build_token_counter(opts, model)
+    plans = build_plans(FixtureStore(settings.fixtures_dir)) if self_check else None
+    agent = build_agent(opts, model, effort, plans=plans)
+    counter = build_token_counter(opts, model, has_key=credentials is not None)
 
     # Fail before the first request rather than mid-run: a missing key would
     # otherwise surface as an auth error several scenarios deep, after the run
@@ -139,17 +192,29 @@ async def run_evals(opts: EvalOptions) -> int:
             token_counter=counter,
             concurrency=opts.concurrency,
             on_result=progress,
-            api=opts.api.value,
+            api=opts.api,
         )
 
     print(report_mod.render_console(run))
 
-    out_path = report_mod.write_json(run, opts.out)
+    # A self-check is not a measurement, and `out/eval-results.json` is the file
+    # `tutu.py viewer` opens as the last real run — same reason `tutu.py demo`
+    # keeps to its own path. An explicit --out still wins.
+    out = SELF_CHECK_OUT if self_check and opts.out == DEFAULT_OUT else opts.out
+    out_path = report_mod.write_json(run, out)
     print(f"\nПодробный отчёт: {out_path}")
 
     if isinstance(backend, RecordingBackend) and backend.recorded:
         print(f"Дозаписано фикстур: {len(backend.recorded)}")
         for tool, scenario in backend.recorded:
             print(f"  + {tool}/{scenario}")
+
+    if self_check:
+        mismatches = self_check_mismatches(run)
+        print(report_mod.render_self_check(run, mismatches))
+        # Non-zero on the slightest disagreement, and on a run that checked
+        # nothing at all: the whole point here is that a broken harness must not
+        # come out looking like a working one.
+        return 1 if mismatches or not self_check_verdicts(run) else 0
 
     return 0
