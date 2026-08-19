@@ -1,5 +1,10 @@
 const DATA = JSON.parse(document.getElementById('trace-data').textContent);
-const STATUS_RU = { confirmed: 'подтверждено', assumed: 'допущение', unavailable: 'нет в данных' };
+const STATUS_RU = {
+  confirmed: 'подтверждено',
+  assumed: 'допущение',
+  user_stated: 'слова пользователя',
+  unavailable: 'нет в данных',
+};
 const state = {
   variant: DATA.variants[0]?.variant,
   scenario: null,
@@ -351,6 +356,7 @@ function renderNav() {
 const LEGEND = [
   ['confirmed', 'подтверждено в tool_result'],
   ['assumed', 'объявленное допущение'],
+  ['user_stated', 'условие из запроса пользователя'],
   ['unavailable', 'в данных нет'],
 ];
 
@@ -677,6 +683,11 @@ function openDrawer(claimIndex, resetWindow = true) {
         <b>${esc(ev.call.name)}</b>, позиция ${ev.at}.</div>
       <div class="lbl-sm">Фрагмент ответа сервера${payloadSwitch(ev.call)}</div>
       ${evidenceFragment(ev)}`;
+  } else if (claim.status === 'user_stated') {
+    body = `<div class="verdict-line">Значение <b>${esc(claim.text)}</b> назвал сам пользователь —
+      это условие запроса, процитированное в ответе. Сервер его подтверждать не обязан,
+      и выдумкой оно не является.</div>
+      <div class="lbl-sm">Запрос сценария</div><pre>${esc(scn.request)}</pre>`;
   } else if (claim.status === 'assumed') {
     body = `<div class="verdict-line">Значение <b>${esc(claim.text)}</b> сервер не возвращал — это
       допущение, которое агент объявил заранее.</div>

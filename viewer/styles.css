@@ -462,6 +462,9 @@ nav {
 .bars i.confirmed {
   background: var(--confirmed);
 }
+.bars i.user_stated {
+  background: var(--user-stated);
+}
 .bars i.assumed {
   background: var(--assumed);
 }
@@ -623,6 +626,10 @@ section.pane {
 .claim.unavailable {
   background: var(--unavailable-bg);
   color: var(--unavailable);
+}
+.claim.user_stated {
+  background: var(--user-stated-bg);
+  color: var(--user-stated);
 }
 .claim.sel {
   outline: 1px solid var(--ink);

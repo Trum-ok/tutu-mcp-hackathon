@@ -97,6 +97,10 @@
   --assumed-bg: #ffefc3;
   --unavailable: #b03228;
   --unavailable-bg: #fce0dc;
+  /* Слова самого пользователя, процитированные в ответе: не доказательство и не
+     выдумка, поэтому ни зелёный, ни красный — нейтральный синий. */
+  --user-stated: #1f4f8f;
+  --user-stated-bg: #dde8f8;
   --sans: Onest, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   --r-lg: 18px;
