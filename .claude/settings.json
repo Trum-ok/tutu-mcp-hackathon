@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(make run-live)",
+      "Bash(make evals)",
+      "Bash(make evals-record)",
+      "Bash(make fixtures)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-live-commands.py\"",
+            "statusMessage": "Проверка на живой режим",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
