@@ -290,3 +290,75 @@ async def test_instructions_result_carries_the_trimmed_prose(server):
 
     assert "Field reference (trimmed from inputSchema)" in text
     assert "Full reference for `search_rail`" in text
+
+
+async def test_an_http_client_without_a_session_id_gets_no_shared_state(server):
+    """Falling back to the stdio key put every unidentified HTTP client into one
+    bucket, where one client's assumptions and spent one-shot gate became the
+    next client's starting position."""
+    anonymous = FakeCtx()  # HTTP request, no mcp-session-id header
+    args = {**RAIL_ARGS, "price_max": 3000}
+
+    first = await _call(server, "search_rail", args, anonymous)
+    second = await _call(server, "search_rail", args, FakeCtx())
+
+    # each gets its own one-shot gate; a shared bucket would let the second through
+    assert "clarification_required" in _text(first)
+    assert "clarification_required" in _text(second)
+
+
+async def test_stdio_still_keeps_one_conversation(server):
+    """No `.request` at all means stdio, where a single shared session is correct —
+    it is the same conversation, and forgetting it between calls would re-ask
+    everything the user already answered."""
+    stdio = type("Ctx", (), {})()
+    args = {**RAIL_ARGS, "price_max": 3000}
+
+    first = await _call(server, "search_rail", args, stdio)
+    second = await _call(server, "search_rail", args, stdio)
+
+    assert "clarification_required" in _text(first)
+    assert "offers" in _text(second), "повтор того же вызова должен разблокироваться"
+
+
+class _CountingCatalogBackend:
+    """Counts `list_tools` calls; serves everything else from the real mock."""
+
+    def __init__(self, inner, fail_after: int | None = None):
+        self._inner = inner
+        self._fail_after = fail_after
+        self.loads = 0
+
+    async def list_tools(self):
+        self.loads += 1
+        if self._fail_after is not None and self.loads > self._fail_after:
+            raise BackendTimeoutError("timed out")
+        return await self._inner.list_tools()
+
+    async def call_tool(self, name, arguments):
+        return await self._inner.call_tool(name, arguments)
+
+
+async def test_an_expired_catalog_is_refetched(repo_fixtures):
+    """Cached for the life of the process, the catalog kept serving tools upstream
+    may have renamed or dropped hours earlier — and a stale catalog looks exactly
+    like a fresh one from the outside."""
+    backend = _CountingCatalogBackend(MockUpstreamClient(repo_fixtures))
+    server = build_server(backend, catalog_ttl_s=0)
+
+    await _handler(server, "tools/list")(FakeCtx(), None)
+    await _handler(server, "tools/list")(FakeCtx(), None)
+
+    assert backend.loads == 2
+
+
+async def test_a_failed_refresh_keeps_serving_the_last_good_catalog(repo_fixtures):
+    """Expiry must not turn a working proxy into a broken one the moment upstream
+    blinks: an outdated catalog is still a usable catalog."""
+    backend = _CountingCatalogBackend(MockUpstreamClient(repo_fixtures), fail_after=1)
+    server = build_server(backend, catalog_ttl_s=0)
+
+    first = await _handler(server, "tools/list")(FakeCtx(), None)
+    second = await _handler(server, "tools/list")(FakeCtx(), None)
+
+    assert {t.name for t in second.tools} == {t.name for t in first.tools}

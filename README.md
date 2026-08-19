@@ -104,6 +104,7 @@ cp .env.example .env      # затем впишите OPENAI_API_KEY
 | `TUTU_UPSTREAM_URL`                   | адрес upstream MCP-сервера                                                                | `https://mcp.tutu.ru/mcp`   |
 | `TUTU_UPSTREAM_TIMEOUT_S`             | таймаут одного запроса к живому серверу, секунды                                          | `20`                        |
 | `TUTU_FIXTURES_DIR`                   | где лежат записанные фикстуры                                                             | `./fixtures`                |
+| `TUTU_CATALOG_TTL_S`                  | как долго закешированный `tools/list` считается свежим, секунды                           | `900`                       |
 | `TUTU_PROXY_HOST` / `TUTU_PROXY_PORT` | адрес прослушивания                                                                       | `127.0.0.1` / `8800`        |
 | `PORT`                                | фолбэк для PaaS (Render/Railway/Fly/…); `TUTU_PROXY_PORT` в приоритете — см. `Dockerfile` | задаёт платформа            |
 

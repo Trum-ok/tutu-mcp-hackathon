@@ -19,7 +19,7 @@ async def serve() -> None:
     source = f"upstream={settings.upstream_url}" if live else f"fixtures={settings.fixtures_dir}"
 
     async with backend_for(settings, live=live) as wiring:
-        server = build_server(wiring.backend, name=name)
+        server = build_server(wiring.backend, name=name, catalog_ttl_s=settings.catalog_ttl_s)
         print(f"[tutu-mcp-proxy] {settings.mode} mode — {source}")
         print(f"[tutu-mcp-proxy] listening on http://{settings.host}:{settings.port}/mcp")
         await server.run_streamable_http_async(host=settings.host, port=settings.port)

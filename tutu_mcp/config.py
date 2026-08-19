@@ -20,6 +20,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 load_dotenv(REPO_ROOT / ".env", override=False)
 
+DEFAULT_CATALOG_TTL_S = 900.0
+"""How long a fetched `tools/list` stays good, in seconds.
+
+Lives here rather than next to `proxy.server.build_server`, which takes it as an
+argument, so that the number and the `TUTU_CATALOG_TTL_S` that overrides it are
+declared in one place — the same rule every other setting in this file follows.
+"""
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -27,6 +35,7 @@ class Settings:
     upstream_timeout_s: float
     mode: str  # "live" or "mock"
     fixtures_dir: Path
+    catalog_ttl_s: float
     host: str
     port: int
 
@@ -43,6 +52,10 @@ def load_settings() -> Settings:
         upstream_timeout_s=float(os.environ.get("TUTU_UPSTREAM_TIMEOUT_S", "20")),
         mode=os.environ.get("TUTU_PROXY_MODE", "mock"),
         fixtures_dir=Path(os.environ.get("TUTU_FIXTURES_DIR", str(REPO_ROOT / "fixtures"))),
+        # Upstream can add a tool or change a schema at any time, and a catalog
+        # cached for the life of the process looks exactly like a fresh one — so
+        # a long-running proxy served a stale surface until someone restarted it.
+        catalog_ttl_s=float(os.environ.get("TUTU_CATALOG_TTL_S") or DEFAULT_CATALOG_TTL_S),
         host=os.environ.get("TUTU_PROXY_HOST", "127.0.0.1"),
         # `PORT` is the fallback because every PaaS (Render, Railway, Fly, Heroku)
         # assigns the port that way and ignores anything else; `TUTU_PROXY_PORT`
