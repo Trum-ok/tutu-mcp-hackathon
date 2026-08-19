@@ -29,3 +29,19 @@ jobs:
 
       - name: ty
         run: uv run ty check tutu.py tutu_mcp evals viewer
+
+  lint-front:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Biome
+        run: npm ci
+
+      - name: biome
+        run: npx --no biome ci viewer

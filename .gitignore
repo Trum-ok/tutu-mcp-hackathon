@@ -46,6 +46,9 @@ local/
 # Ruff
 .ruff_cache/
 
+# Biome
+node_modules/
+
 # Eval run output
 out/
 viewer/trace-viewer.html

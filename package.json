@@ -1,0 +1,8 @@
+{
+  "name": "tutu-mcp-viewer",
+  "private": true,
+  "description": "Front-end toolchain for the trace viewer (viewer/): Biome lint + format",
+  "devDependencies": {
+    "@biomejs/biome": "2.5.9"
+  }
+}
