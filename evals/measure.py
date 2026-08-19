@@ -2,6 +2,12 @@
 
     uv run python tutu.py measure
 
+Lives in the harness, not in `tutu_mcp/proxy/`: nothing the proxy serves at
+runtime imports it — this measures the proxy, which is the same job `tokens.py`
+does one level up (bytes here, provider-counted tokens there). Fixtures are read
+through `FixtureStore` like everywhere else, so `TUTU_FIXTURES_DIR` points this
+at the same recording a run uses instead of at a hardcoded `fixtures/`.
+
 Every "X -> Y bytes" claim in the README and the docs page traces back to this
 module's output, not to the one-off live probe against mcp.tutu.ru that
 `docs/findings.md` records (2026-08-19, server `0.38.0`) — that capture used
@@ -17,14 +23,14 @@ of percent apart; `docs/findings.md` keeps the original as a dated data point).
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
+from tutu_mcp.config import load_settings
 from tutu_mcp.proxy.compact_tools import apply_compact_overrides, apply_result_appendix
 from tutu_mcp.proxy.surface import PROXY_INSTRUCTIONS, proxy_catalog
+from tutu_mcp.replay.store import FixtureStore
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-FIXTURES_META = REPO_ROOT / "fixtures" / "_meta"
+RAIL_INSTRUCTIONS_TOOL = "get_rail_instructions"
 
 
 def _bytes_of(text: str | None) -> int:
@@ -72,25 +78,19 @@ class CatalogMeasurement:
         ) / self.baseline_with_init_bytes
 
 
-def measure_catalog() -> CatalogMeasurement:
-    raw = json.loads((FIXTURES_META / "tools_list.json").read_text(encoding="utf-8"))
+def measure_catalog(store: FixtureStore) -> CatalogMeasurement:
+    raw = store.load_tools_list()
     compacted, trimmed_originals = apply_compact_overrides(raw)
     proxy_tools = proxy_catalog(compacted)
 
-    server_info = json.loads((FIXTURES_META / "server_info.json").read_text(encoding="utf-8"))
-    tutu_instructions_bytes = _bytes_of(server_info["instructions"])
+    tutu_instructions_bytes = _bytes_of(store.instructions())
     proxy_instructions_bytes = _bytes_of(PROXY_INSTRUCTIONS)
 
     targeted = set(trimmed_originals)
     schema_prose_after = sum(_schema_prose_bytes(t.get("inputSchema")) for t in compacted)
 
-    rail_fixture = json.loads(
-        (REPO_ROOT / "fixtures" / "get_rail_instructions" / "default.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    rail_text = rail_fixture["result"]["text"]
-    rail_after = apply_result_appendix("get_rail_instructions", rail_text, trimmed_originals)
+    rail_text = store.find_result(RAIL_INSTRUCTIONS_TOOL, {}).text
+    rail_after = apply_result_appendix(RAIL_INSTRUCTIONS_TOOL, rail_text, trimmed_originals)
 
     baseline = _size(raw)
     proxy = _size(proxy_tools)
@@ -116,7 +116,7 @@ def measure_catalog() -> CatalogMeasurement:
 
 
 def print_report() -> int:
-    m = measure_catalog()
+    m = measure_catalog(FixtureStore(load_settings().fixtures_dir))
     print("=== tools/list: baseline vs proxy (reproducible from fixtures/) ===")
     print(f"  tools            {m.n_tools_raw} -> {m.n_tools_proxy}  (2 synthetic added)")
     print(f"  catalog bytes    {m.baseline_bytes:,} -> {m.proxy_bytes:,}  (-{m.reduction:.1%})")

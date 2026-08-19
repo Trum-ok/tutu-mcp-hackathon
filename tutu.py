@@ -8,7 +8,7 @@ that measures it). Putting it in `tutu_mcp/` would make the proxy import its own
 harness — the exact dependency direction `evals/config.py` exists to avoid.
 
     tutu.py ──> tutu_mcp/       (serve, record)
-            ├─> evals/          (evals, demo) ──> tutu_mcp/
+            ├─> evals/          (evals, demo, measure) ──> tutu_mcp/
             └─> evals/options.py  — the only import taken eagerly, see below
 """
 
@@ -159,7 +159,7 @@ def docs(out: Path | None = typer.Option(None, help="[default: site/index.html]"
 @app.command()
 def measure() -> None:
     """Reproducible tools/list byte accounting (baseline vs proxy), from fixtures/."""
-    from tutu_mcp.proxy.measure import print_report
+    from evals.measure import print_report
 
     raise typer.Exit(print_report())
 

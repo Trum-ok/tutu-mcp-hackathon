@@ -50,7 +50,6 @@ tutu_mcp/                  сам прокси — это то, что подн�
   proxy/dispatch.py        единый пайплайн tools/call — общий для сервера и proxy-варианта эвалов
   proxy/surface.py         свои тулы прокси (assess_request, check_groundedness) + сборка каталога
   proxy/compact_tools.py   урезание описаний + сплайсинг проза-в-результат
-  proxy/measure.py         воспроизводимый подсчёт байт каталога — источник цифр в этом README
   proxy/server.py          сборка MCPServer прокси (tools/list, tools/call, check_groundedness)
   groundedness.py          извлечение утверждений + проверка обоснованности
   premises.py              premise gate: происхождение значений, детектор опечаток, assess_request
@@ -68,6 +67,7 @@ evals/                     харнесс, который измеряет пр�
   checks.py                детерминированные проверки по сценарию
   report.py                консольная сводка + JSON для трейс-вьювера
   tokens.py                подсчёт токенов (точный через API либо офлайн через tiktoken)
+  measure.py               воспроизводимый подсчёт байт каталога — источник цифр в этом README
   run.py                   один прогон целиком: агент + счётчик + поверхности -> измерение
   demo.py                  рукописные трейсы поверх настоящих фикстур, без модели
   config.py                учётные данные OPENAI_* и модель по умолчанию — только для харнесса

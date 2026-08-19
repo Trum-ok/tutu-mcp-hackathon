@@ -7,11 +7,11 @@ fails: rerun `uv run python tutu.py measure`, update the pinned numbers below,
 and update every place in the docs that quotes the old ones.
 """
 
-from tutu_mcp.proxy.measure import measure_catalog
+from evals.measure import measure_catalog
 
 
-def test_catalog_byte_counts_match_the_docs():
-    m = measure_catalog()
+def test_catalog_byte_counts_match_the_docs(repo_fixtures):
+    m = measure_catalog(repo_fixtures)
     assert (m.n_tools_raw, m.n_tools_proxy) == (16, 18)
     assert (m.baseline_bytes, m.proxy_bytes) == (110164, 79411)
     assert (m.baseline_with_init_bytes, m.proxy_with_init_bytes) == (121646, 81428)
