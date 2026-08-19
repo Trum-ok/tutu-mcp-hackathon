@@ -17,6 +17,7 @@ import pytest
 from mcp.shared.exceptions import MCPError
 
 from tutu_mcp.backend import BackendTimeoutError
+from tutu_mcp.proxy.dispatch import PREAMBLE_KEY
 from tutu_mcp.proxy.server import MAX_SESSIONS, PROXY_INSTRUCTIONS, build_server
 from tutu_mcp.replay.mock_client import MockUpstreamClient
 
@@ -118,14 +119,15 @@ async def test_control_fields_do_not_reach_the_fixture_lookup(server):
     assert "offers" in _text(result)
 
 
-async def test_declared_assumption_appends_a_mandatory_preamble(server):
+async def test_declared_assumption_carries_a_mandatory_preamble(server):
     result = await _call(
         server, "search_rail", {**RAIL_ARGS, "price_max": 3000, "_assume": {"price_max": "бюджет"}}
     )
-    text = _text(result)
+    payload = json.loads(_text(result))
 
-    assert "Обязательная преамбула" in text
-    assert "бюджет" in text
+    # inside the JSON, not appended after it — see `attach_preamble`
+    assert "бюджет" in payload[PREAMBLE_KEY]
+    assert payload["offers"], "данные должны прийти вместе с преамбулой, а не вместо неё"
 
 
 async def test_sessions_do_not_share_premise_state(server):
@@ -144,8 +146,9 @@ async def test_repeating_an_unchanged_call_releases_instead_of_looping(server):
     second = await _call(server, "search_rail", {**RAIL_ARGS, "price_max": 3000}, ctx)
 
     assert "clarification_required" in _text(first)
-    assert "offers" in _text(second)
-    assert "Обязательная преамбула" in _text(second)
+    released = json.loads(_text(second))
+    assert released["offers"]
+    assert released[PREAMBLE_KEY]
 
 
 async def test_session_table_is_bounded(server):
