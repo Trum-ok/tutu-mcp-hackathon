@@ -4,6 +4,7 @@ import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import anyio
 import mcp_types as types
 from mcp.client import Client as MCPClient
 from mcp.shared.exceptions import MCPError
@@ -40,6 +41,11 @@ class UpstreamClient:
         self._url = url
         self._timeout_s = timeout_s
         self._client: MCPClient | None = None
+        # The proxy serves concurrent `tools/call`s off one client, so two of them
+        # can meet a broken connection at the same moment. Without this, both would
+        # tear the client down and hand `self._client` to a handshake of their own,
+        # and the loser's fresh connection would be dropped on the floor still open.
+        self._reconnect_lock = anyio.Lock()
 
     async def connect(self) -> None:
         self._client = MCPClient(self._url, read_timeout_seconds=self._timeout_s)
@@ -64,13 +70,23 @@ class UpstreamClient:
             )
         return self._client
 
-    async def _reconnect(self) -> None:
-        """Best-effort close of the dead connection, then a fresh handshake."""
-        if self._client is not None:
-            with contextlib.suppress(Exception):  # already broken — nothing left to salvage from it
-                await self._client.__aexit__(None, None, None)
-            self._client = None
-        await self.connect()
+    async def _reconnect(self, stale: MCPClient | None) -> None:
+        """Best-effort close of the dead connection, then a fresh handshake.
+
+        `stale` is the client the caller actually failed on. Whoever takes the lock
+        second finds a different client already in place and returns without
+        touching it — its call then simply retries on the connection the first one
+        opened, which is the outcome both were after anyway.
+        """
+        async with self._reconnect_lock:
+            if self._client is not stale:
+                return
+            if self._client is not None:
+                # already broken — nothing left to salvage from it
+                with contextlib.suppress(Exception):
+                    await self._client.__aexit__(None, None, None)
+                self._client = None
+            await self.connect()
 
     async def _call[T](self, call: Callable[[MCPClient], Awaitable[T]]) -> T:
         """Runs `call` against the live client; on any non-timeout failure,
@@ -80,21 +96,42 @@ class UpstreamClient:
         was reachable and just slow, so tearing down a live connection over
         it would only make the next call worse, not better.
         """
+        client = self._require_client()
         try:
-            return await call(self._require_client())
+            return await call(client)
         except Exception as exc:
             translated = _translate(exc)
             if isinstance(translated, BackendTimeoutError):
                 raise translated from exc
-            await self._reconnect()
+            await self._reconnect(client)
             try:
                 return await call(self._require_client())
             except Exception as retry_exc:
                 raise _translate(retry_exc) from retry_exc
 
     async def list_tools(self) -> list[dict[str, Any]]:
-        result = await self._call(lambda client: client.list_tools())
-        return [t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in result.tools]
+        """Every page of upstream's catalog, joined.
+
+        Tutu answers today's 16 tools in one page, so dropping `nextCursor` looked
+        free — until the 17th tool, where a silently truncated catalog is worse
+        than a loud failure: the agent would simply not know a tool exists. Pages
+        are joined here rather than forwarded outward because the proxy caches and
+        rewrites the catalog as a whole anyway (see `proxy/server.py`).
+        """
+        tools: list[dict[str, Any]] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            result = await self._call(lambda client, c=cursor: client.list_tools(cursor=c))
+            tools.extend(
+                t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in result.tools
+            )
+            cursor = result.next_cursor
+            # A server that keeps handing back a cursor it already gave would spin
+            # this loop forever; stopping loses nothing a repeat page would add.
+            if cursor is None or cursor in seen_cursors:
+                return tools
+            seen_cursors.add(cursor)
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> ToolCallResult:
         result = await self._call(lambda client: client.call_tool(name, arguments))
