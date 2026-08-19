@@ -2,16 +2,20 @@
 
 `tools/list` is always loaded by the client — Tutu's own article measured it
 compressing *responses* by 74%, but the always-on tool catalog itself still
-runs ~110 KB / ~30K tokens (measured live on 2026-08-19: search_rail alone
-carries a 9.2 KB description, create_checkout_link a 5.9 KB one, 14.7 KB of
-per-field schema). That's paid on every single session before the agent has
-searched anything.
+runs ~108 KB (search_rail alone carries a 9.4 KB description, create_checkout_link
+a 5.8 KB one). That's paid on every single session before the agent has
+searched anything. Exact, reproducible numbers: `uv run python tutu.py measure`
+(re-serializes `fixtures/_meta/tools_list.json` the same way
+`tests/test_measure.py` pins it — not the one-off live capture in
+`docs/findings.md`, which used Tutu's own wire bytes and lands a couple of
+percent off from anything re-derived offline).
 
 This module rewrites PROSE and nothing else. Measured on the same catalog, the
-prose splits in two: ~14 KB of top-level `description`, and **31.7 KB — 35% of
-the entire catalog — inside `inputSchema.properties[].description`**. The second
-number is the bigger one, so `trim_schema_prose` gives that nested prose the same
-treatment: the field keeps a short hint, the full sentence moves on-demand.
+prose splits in two: ~45 KB of top-level `description` across all 16 tools —
+of which the three targeted here account for ~33 KB, trimmed to ~16 KB — and
+**~31 KB inside `inputSchema.properties[].description`**, trimmed to ~16 KB by
+`trim_schema_prose`: the field keeps a short hint, the full sentence moves
+on-demand.
 
 The authoritative half of a schema still goes out byte-identical — `type`,
 `enum`, `required`, `format`, field names, nothing renamed or retyped

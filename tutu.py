@@ -148,5 +148,13 @@ def viewer(
     raise typer.Exit(build_viewer(data or DEFAULT_DATA, out or DEFAULT_OUT))
 
 
+@app.command()
+def measure() -> None:
+    """Reproducible tools/list byte accounting (baseline vs proxy), from fixtures/."""
+    from tutu_mcp.proxy.measure import print_report
+
+    raise typer.Exit(print_report())
+
+
 if __name__ == "__main__":
     app()
