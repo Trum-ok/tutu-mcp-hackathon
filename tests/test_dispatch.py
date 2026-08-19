@@ -8,6 +8,8 @@ from tutu_mcp.backend import ToolCallResult
 from tutu_mcp.groundedness import check_groundedness
 from tutu_mcp.premises import SessionPremises
 from tutu_mcp.proxy.dispatch import PREAMBLE_KEY, attach_preamble, dispatch
+from tutu_mcp.proxy.empty_results import EMPTY_RESULT_KEY
+from tutu_mcp.replay.mock_client import MockUpstreamClient
 
 RAIL_ARGS = {
     "origin": "Санкт-Петербург",
@@ -73,3 +75,19 @@ def test_the_preamble_is_not_evidence_for_the_claims_it_discloses():
     report = check_groundedness("Цена 4 662,32 ₽", [payload])
 
     assert [c.status for c in report.checks] == ["unavailable"]
+
+
+async def test_only_the_proxy_variant_gets_the_empty_result_note(repo_fixtures):
+    """Baseline must see exactly what Tutu returned. Annotating both would turn
+    the comparison into a test of our wording rather than of the proxy."""
+    backend = MockUpstreamClient(repo_fixtures)
+    args = {**RAIL_ARGS, "train_numbers": ["999999"]}
+    # the user named the train number, so the premise gate lets the call through
+    # and we reach the empty result this test is actually about
+    session = SessionPremises(user_request="Есть ли поезд номер 999999 из Петербурга в Москву?")
+
+    proxied = await dispatch(session, backend, "search_rail", args, {})
+    raw = await dispatch(None, backend, "search_rail", args, {})
+
+    assert EMPTY_RESULT_KEY in json.loads(proxied.text)
+    assert EMPTY_RESULT_KEY not in json.loads(raw.text)

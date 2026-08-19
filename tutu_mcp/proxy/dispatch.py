@@ -25,6 +25,7 @@ from tutu_mcp.backend import (
 from tutu_mcp.premises import SessionPremises, strip_control_fields
 
 from .compact_tools import apply_result_appendix
+from .empty_results import annotate_empty_result
 from .surface import SYNTHETIC
 
 
@@ -136,6 +137,10 @@ async def dispatch(
     text = apply_result_appendix(name, result.text, trimmed_originals)
     if session is not None:
         if not result.is_error:
+            # A proxy-only annotation, like the premise gate itself: baseline must
+            # keep seeing exactly what Tutu returned, or the comparison stops
+            # measuring the proxy and starts measuring a better prompt.
+            text = annotate_empty_result(text)
             # An error payload's own echoed arguments (e.g. a fixture miss quoting
             # the invented value back) must never become a "seen" value — that
             # would let the premise gate wave the same invention through next call.

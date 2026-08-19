@@ -18,6 +18,11 @@ Compacting/grounding MCP-прокси перед [`mcp.tutu.ru`](https://mcp.tut
 - **`check_groundedness`.** Детерминированно сверяет черновик ответа с `tool_result`, на
   которые он опирается — вытаскивает из текста цены/время/номера поездов-рейсов/ссылки и
   проверяет их фактическое присутствие в JSON, без LLM-судьи (`tutu_mcp/groundedness.py`).
+- **Empty-result note.** The article's most-cited failure is an agent reading an empty filtered
+  search as "этот поезд не ходит", when the tool only ever returned what is *on sale*. Tutu's own
+  `meta.post_filter_dropped_*` counters say which filter emptied the list — the proxy turns them
+  into a sentence attached to the result (`_empty_result_note`), so the agent can state a fact
+  instead of guessing at a timetable it was never given (see `tutu_mcp/proxy/empty_results.py`).
 - **Premise gate + `assess_request`.** `check_groundedness` проверяет ВЫХОД хода, это —
   ВХОД: значение, сужающее поиск, обязано прийти от пользователя или из прошлого
   `tool_result`. Придуманный агентом фильтр (классика: молча предположить время окончания
