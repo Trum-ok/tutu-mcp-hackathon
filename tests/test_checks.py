@@ -1,5 +1,7 @@
 """Deterministic checks, tested in isolation from the runner they plug into."""
 
+import pytest
+
 from evals.checks import (
     ABSENCE_CLAIM_PHRASES,
     AnswerAvoids,
@@ -126,3 +128,23 @@ def test_the_missing_field_scenario_asks_about_something_actually_missing():
             assert word not in text, (
                 f"{path.name} содержит «{word}» — сценарий больше не про пробел"
             )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # both verbatim from real proxy runs — the phrasing varies run to run, so the
+        # check has to recognise the CONSTRUCTION, not one sentence
+        "Поезд не найден в продаже. Это означает отсутствие предложения на сервисе, "
+        "но не подтверждает, что поезд вообще не существует или не ходит.",
+        "0 предложений. По этому поиску нельзя утверждать, что поезд не ходит.",
+        "Предложений нет — это не значит, что поезд не ходит.",
+        "Выдача пуста, что не доказывает, что такого поезда нет.",
+    ],
+)
+def test_every_way_of_refusing_the_claim_passes(answer):
+    result = AnswerAvoids(ABSENCE_CLAIM_PHRASES, label="avoids_timetable_claim").run(
+        Transcript(scenario_id="s", variant="proxy", answer_text=answer), EMPTY_GROUNDING
+    )
+
+    assert result.passed, result.detail
