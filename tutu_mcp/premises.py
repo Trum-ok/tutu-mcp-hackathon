@@ -304,13 +304,27 @@ class Conflict:
     ask: str
 
 
+# Long enough to reach the next 29 February from any starting point (the gap is at
+# most 8 years across a century boundary), short enough that a date valid every year
+# is still resolved to the nearest one.
+_YEAR_SEARCH_SPAN = 9
+
+
 def _resolve_year(day: int, month: int, today: date) -> date | None:
-    """Pick the nearest future occurrence of day/month, the way a person means it."""
-    for year in (today.year, today.year + 1):
+    """Pick the nearest future occurrence of day/month, the way a person means it.
+
+    A day/month invalid in ONE year is not invalid in every year: 29 February
+    exists, just not annually. Returning `None` on the first `ValueError` meant
+    "в понедельник 29 февраля" resolved to nothing, so the weekday contradiction
+    it might contain was never checked — the typo detector silently skipped the
+    one date most likely to carry a typo. 31 February and friends still yield
+    `None`, having failed in every year of the span.
+    """
+    for year in range(today.year, today.year + _YEAR_SEARCH_SPAN):
         try:
             candidate = date(year, month, day)
         except ValueError:
-            return None  # 31 февраля and friends — a different error, not ours
+            continue
         if candidate >= today:
             return candidate
     return None

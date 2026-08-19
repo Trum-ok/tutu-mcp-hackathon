@@ -534,3 +534,21 @@ def test_a_user_stated_filter_is_neither_dropped_nor_asked_about():
     )
 
     assert decision is None
+
+
+def test_a_leap_day_resolves_to_the_next_leap_year_instead_of_vanishing():
+    """`_resolve_year` used to give up on the first `ValueError`, so 29 February
+    resolved to nothing and the weekday check silently skipped the date most
+    likely to carry a typo. 2028-02-29 is a Tuesday."""
+    conflicts = check_calendar_consistency("поеду в понедельник 29 февраля", date(2026, 8, 19))
+
+    assert len(conflicts) == 1
+    assert "2028-02-29" in conflicts[0].actual
+
+
+def test_a_correct_leap_day_weekday_is_not_flagged():
+    assert check_calendar_consistency("поеду во вторник 29 февраля", date(2026, 8, 19)) == []
+
+
+def test_a_date_invalid_in_every_year_still_resolves_to_nothing():
+    assert check_calendar_consistency("поеду в среду 31 февраля", date(2026, 8, 19)) == []
