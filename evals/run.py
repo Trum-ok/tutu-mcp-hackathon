@@ -9,9 +9,6 @@ the run had already spent tokens and (with `--live`) upstream rate limit.
 """
 
 import sys
-from dataclasses import dataclass
-from enum import StrEnum
-from pathlib import Path
 
 from evals import report as report_mod
 from evals.agent import (
@@ -23,9 +20,12 @@ from evals.agent import (
 )
 from evals.config import (
     MISSING_CREDENTIALS_HELP,
+    InvalidEffortError,
     openai_credentials_source,
+    openai_effort_default,
     openai_model_default,
 )
+from evals.options import AgentKind, Api, Effort, EvalOptions
 from evals.runner import ScenarioResult, run_eval
 from evals.scenarios import select
 from evals.tokens import (
@@ -34,7 +34,7 @@ from evals.tokens import (
     ResponsesApiTokenCounter,
     TokenCounter,
 )
-from evals.variants import BASELINE, PROXY, build_variants
+from evals.variants import build_variants
 from tutu_mcp.config import load_settings
 from tutu_mcp.replay.mock_client import MockUpstreamClient
 from tutu_mcp.replay.recording import RecordingBackend
@@ -42,51 +42,15 @@ from tutu_mcp.replay.store import FixtureStore
 from tutu_mcp.upstream.client import UpstreamClient
 
 
-class AgentKind(StrEnum):
-    OPENAI = "openai"
-    SCRIPTED = "scripted"
-
-
-class Api(StrEnum):
-    RESPONSES = "responses"
-    CHAT = "chat"
-
-
-class Effort(StrEnum):
-    NONE = "none"
-    MINIMAL = "minimal"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-@dataclass(frozen=True)
-class EvalOptions:
-    """Everything one run needs. Defaults match what the CLI advertises."""
-
-    agent: AgentKind = AgentKind.OPENAI
-    model: str | None = None
-    effort: Effort | None = None
-    api: Api = Api.RESPONSES
-    live: bool = False
-    record_missing: bool = False
-    variants: tuple[str, ...] = (BASELINE, PROXY)
-    scenarios: tuple[str, ...] | None = None
-    domains: tuple[str, ...] | None = None
-    concurrency: int = 1
-    out: Path = Path("out/eval-results.json")
-    estimate_tokens: bool = False
-
-
-def build_agent(opts: EvalOptions, model: str) -> Agent:
+def build_agent(opts: EvalOptions, model: str, effort: Effort | None) -> Agent:
     if opts.agent is AgentKind.SCRIPTED:
         # Empty plan: every scenario runs with no tool calls and an empty answer.
         # Useful only to prove the harness wiring end to end, never as a measurement.
         return ScriptedAgent(plan={})
-    effort = opts.effort.value if opts.effort else None
+    value = effort.value if effort else None
     if opts.api is Api.CHAT:
-        return ChatCompletionsAgent(model=model, effort=effort)
-    return ResponsesAgent(model=model, effort=effort)
+        return ChatCompletionsAgent(model=model, effort=value)
+    return ResponsesAgent(model=model, effort=value)
 
 
 def build_token_counter(opts: EvalOptions, model: str) -> TokenCounter:
@@ -134,7 +98,14 @@ async def run_evals(opts: EvalOptions) -> int:
         return 2
 
     model = opts.model or openai_model_default()
-    agent = build_agent(opts, model)
+    # --effort wins over OPENAI_EFFORT, which wins over the model's own default —
+    # the same precedence --model has over OPENAI_MODEL.
+    try:
+        effort = opts.effort or openai_effort_default()
+    except InvalidEffortError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    agent = build_agent(opts, model, effort)
     counter = build_token_counter(opts, model)
 
     # Fail before the first request rather than mid-run: a missing key would
@@ -156,7 +127,7 @@ async def run_evals(opts: EvalOptions) -> int:
     upstream: UpstreamClient | None = None
     try:
         if opts.live:
-            upstream = UpstreamClient(settings.upstream_url)
+            upstream = UpstreamClient(settings.upstream_url, timeout_s=settings.upstream_timeout_s)
             await upstream.connect()
             instructions = upstream.server_info()["instructions"]
             backend = RecordingBackend(store, upstream) if opts.record_missing else upstream

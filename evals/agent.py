@@ -5,10 +5,11 @@ stand-in. The scripted one exists so the runner, metrics and report can be teste
 without credentials and without spending tokens — it is a test double, never a
 substitute for a real measurement.
 
-Uses OpenAI's Chat Completions API rather than the Responses API: it is the
-de-facto interface every OpenAI-compatible gateway implements, so the same
-harness can point at a local or proxied endpoint by setting `OPENAI_BASE_URL`
-alone.
+Two OpenAI loops live here. `ResponsesAgent` is the default, because
+`/v1/responses` is the only endpoint that takes function tools together with
+reasoning. `ChatCompletionsAgent` stays for OpenAI-compatible gateways, which
+implement Chat Completions almost universally and `/v1/responses` rarely — one
+`OPENAI_BASE_URL` plus `--api chat` points the same harness at them.
 """
 
 import json

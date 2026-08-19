@@ -7,17 +7,25 @@ point: it needs to reach both `tutu_mcp` (the proxy) and `evals` (the harness
 that measures it). Putting it in `tutu_mcp/` would make the proxy import its own
 harness — the exact dependency direction `evals/config.py` exists to avoid.
 
-    tutu.py ──> tutu_mcp/   (serve, record)
-            └─> evals/      (evals, demo) ──> tutu_mcp/
+    tutu.py ──> tutu_mcp/       (serve, record)
+            ├─> evals/          (evals, demo) ──> tutu_mcp/
+            └─> evals/options.py  — the only import taken eagerly, see below
 """
 
 import re
+import sys
 from pathlib import Path
 
 import anyio
 import typer
 
-from evals.run import AgentKind, Api, Effort, EvalOptions
+from evals.options import AgentKind, Api, Effort, EvalOptions
+
+# Every command imports its own work inside the function body. That is not
+# style: `evals.variants` and `tutu_mcp.main` both pull in `mcp`, which costs
+# ~0.4 s, and Typer imports this module for `--help` alone. The types above are
+# the one thing that has to be here — Typer reads them off the signatures — and
+# `evals/options.py` exists so that they cost nothing.
 
 app = typer.Typer(
     help="Compacting MCP proxy in front of mcp.tutu.ru, plus the eval harness that measures it.",
@@ -51,7 +59,8 @@ def evals(
     agent: AgentKind = AgentKind.OPENAI,
     model: str | None = typer.Option(None, help="default: $OPENAI_MODEL, else gpt-5"),
     effort: Effort | None = typer.Option(
-        None, help="reasoning effort; omit to let the model use its own default"
+        None,
+        help="reasoning effort; default: $OPENAI_EFFORT, else the model's own default",
     ),
     api: Api = typer.Option(
         Api.RESPONSES,
@@ -82,8 +91,6 @@ def evals(
     ),
 ) -> None:
     """Baseline vs proxy on recorded fixtures (or --live against the real server)."""
-    import sys
-
     from evals.config import MISSING_CREDENTIALS_HELP, openai_credentials_source
     from evals.run import list_models as _list_models
     from evals.run import run_evals
