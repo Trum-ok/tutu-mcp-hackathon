@@ -1,9 +1,10 @@
 # Publishes the user documentation and the trace viewer to GitHub Pages.
 #
-# The viewer is BUILT here rather than committed: `viewer/trace-viewer.html` is a
-# generated artifact (and gitignored), so baking it in CI keeps one source of
-# truth. It is built from the hand-written demo traces, which need no model and
-# no API key — a real eval run's `out/eval-results.json` never leaves a laptop.
+# Both are BUILT here rather than committed: `site/` holds only generated
+# artifacts (gitignored), sourced from `pages/` and `viewer/` respectively, so
+# baking them in CI keeps one source of truth. The viewer is built from the
+# hand-written demo traces, which need no model and no API key — a real eval
+# run's `out/eval-results.json` never leaves a laptop.
 name: pages
 
 on:
@@ -35,23 +36,19 @@ jobs:
       - name: Sync deps
         run: uv sync --frozen
 
-      - name: Build the trace viewer from demo traces
+      # The public MCP endpoint is a repo variable, so redeploying the server
+      # doesn't mean editing HTML. `tutu.py docs` fills in __DEPLOY_URL__ itself
+      # (pages/build.py) — unset (e.g. on a fork), it falls back to the local
+      # address, so the page never shows a raw placeholder to a reader.
+      - name: Build the docs page and the trace viewer from demo traces
+        env:
+          MCP_PUBLIC_URL: ${{ vars.MCP_PUBLIC_URL }}
         run: |
+          uv run python tutu.py docs
           uv run python tutu.py demo
           uv run python tutu.py viewer \
             --data out/eval-results.demo.json \
             --out site/trace-viewer.html
-
-      # The public MCP endpoint is a repo variable, so redeploying the server
-      # doesn't mean editing HTML. Unset (e.g. on a fork) falls back to the local
-      # address, so the page never shows a raw placeholder to a reader.
-      - name: Fill in the MCP endpoint
-        env:
-          MCP_PUBLIC_URL: ${{ vars.MCP_PUBLIC_URL }}
-        run: |
-          URL="${MCP_PUBLIC_URL:-http://127.0.0.1:8800/mcp}"
-          echo "endpoint: $URL"
-          sed -i "s|__DEPLOY_URL__|${URL}|g" site/index.html
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

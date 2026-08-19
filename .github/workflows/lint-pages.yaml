@@ -1,0 +1,51 @@
+# Separate from lint.yaml on purpose: pages/ is the docs-page source, not part
+# of the proxy or the eval harness, and it has its own two-language lint (ruff
+# + ty for build.py, biome for app.js/styles.css) — folding it into the main
+# lint job would hide a pages/ break behind an unrelated badge.
+name: lint-pages
+
+on:
+  push:
+  pull_request:
+
+env:
+  LINT_PATHS: pages
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync deps
+        run: uv sync --frozen
+
+      - name: ruff (lint)
+        run: uv run ruff check $LINT_PATHS
+
+      - name: ruff (format)
+        run: uv run ruff format --check $LINT_PATHS
+
+      - name: ty
+        run: uv run ty check $LINT_PATHS
+
+  lint-front:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Biome
+        run: npm ci
+
+      - name: biome
+        run: npx --no biome ci pages

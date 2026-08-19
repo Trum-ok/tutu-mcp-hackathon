@@ -149,6 +149,14 @@ def viewer(
 
 
 @app.command()
+def docs(out: Path | None = typer.Option(None, help="[default: site/index.html]")) -> None:
+    """Bake the user-docs page (pages/template.html) into a self-contained index.html."""
+    from pages.build import DEFAULT_OUT, build_docs
+
+    raise typer.Exit(build_docs(out or DEFAULT_OUT))
+
+
+@app.command()
 def measure() -> None:
     """Reproducible tools/list byte accounting (baseline vs proxy), from fixtures/."""
     from tutu_mcp.proxy.measure import print_report

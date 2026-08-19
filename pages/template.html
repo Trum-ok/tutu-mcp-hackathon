@@ -5,123 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tutu MCP Proxy · Документация</title>
 <meta name="description" content="Пользовательская документация compacting/grounding MCP-прокси перед mcp.tutu.ru">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* Тот же язык, что и у трейс-вьювера: почти монохромные чернила, три
-   семантических цвета несут весь смысл и ничто с ними не конкурирует. */
-:root{
-  --ink:#0d0f12; --ink-2:#14171c; --ink-3:#1c2027; --line:#282e37; --line-soft:#1f242b;
-  --paper:#e8e4dc; --paper-dim:#9aa1ab; --paper-faint:#5f6873;
-  --confirmed:#4ade80; --confirmed-bg:rgba(74,222,128,.13);
-  --assumed:#fbbf24;  --assumed-bg:rgba(251,191,36,.14);
-  --unavailable:#fb5f4f; --unavailable-bg:rgba(251,95,79,.16);
-  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
-  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
-  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth; scroll-padding-top:20px}
-html,body{margin:0}
-body{
-  background:var(--ink); color:var(--paper); font-family:var(--sans);
-  font-size:15px; line-height:1.7; -webkit-font-smoothing:antialiased;
-}
-body::after{
-  content:""; position:fixed; inset:0; pointer-events:none; z-index:99; opacity:.035;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-a{color:var(--paper); text-decoration-color:var(--paper-faint); text-underline-offset:3px}
-a:hover{text-decoration-color:var(--paper)}
-
-/* ── шапка ─────────────────────────────────────────────────────────────── */
-header{border-bottom:1px solid var(--line); background:linear-gradient(180deg,var(--ink-2),var(--ink))}
-.head-in{max-width:1180px; margin:0 auto; padding:30px 26px 26px}
-.brand{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
-.brand h1{font-family:var(--serif); font-weight:400; font-size:38px; margin:0; line-height:1}
-.brand .sub{font-family:var(--mono); font-size:11px; color:var(--paper-faint); letter-spacing:.14em; text-transform:uppercase}
-.lede{max-width:70ch; margin:16px 0 0; color:var(--paper-dim); font-size:16.5px}
-.lede b{color:var(--paper); font-weight:500}
-.cta{display:flex; gap:10px; flex-wrap:wrap; margin-top:22px}
-.btn{
-  font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
-  border:1px solid var(--line); border-radius:2px; padding:10px 17px; text-decoration:none;
-  color:var(--paper-dim); background:var(--ink-2); transition:color .15s,border-color .15s,background .15s;
-}
-.btn:hover{color:var(--paper); border-color:var(--paper-faint); background:var(--ink-3)}
-.btn.primary{color:var(--ink); background:var(--paper); border-color:var(--paper); font-weight:600}
-.btn.primary:hover{background:#fff; color:var(--ink)}
-
-/* ── раскладка ─────────────────────────────────────────────────────────── */
-.wrap{max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(210px,250px) 1fr; gap:0}
-@media (max-width:920px){.wrap{grid-template-columns:1fr} nav.toc{display:none}}
-nav.toc{border-right:1px solid var(--line); padding:26px 0 60px; position:sticky; top:0; align-self:start; max-height:100vh; overflow-y:auto}
-.toc-h{font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint); padding:0 22px 12px}
-.toc a{
-  display:block; padding:7px 22px; color:var(--paper-dim); text-decoration:none;
-  font-size:13px; border-left:2px solid transparent; transition:background .15s,color .15s;
-}
-.toc a:hover{background:var(--ink-2); color:var(--paper)}
-.toc a.sub2{padding-left:34px; font-size:12.5px; color:var(--paper-faint)}
-main{padding:30px 34px 90px; min-width:0}
-@media (max-width:920px){main{padding:26px 20px 70px}}
-
-section{scroll-margin-top:20px; margin-bottom:52px}
-h2{font-family:var(--serif); font-weight:400; font-size:29px; margin:0 0 6px; line-height:1.15}
-h2 .num{font-family:var(--mono); font-size:12px; color:var(--paper-faint); letter-spacing:.1em; display:block; margin-bottom:7px; text-transform:uppercase}
-h3{font-family:var(--serif); font-weight:400; font-size:21px; margin:30px 0 8px}
-h4{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--paper-faint); margin:22px 0 7px; font-weight:500}
-p{margin:0 0 13px; max-width:74ch}
-ul,ol{max-width:74ch; padding-left:20px; margin:0 0 13px}
-li{margin-bottom:6px}
-code{font-family:var(--mono); font-size:.87em; background:var(--ink-3); border:1px solid var(--line-soft); border-radius:2px; padding:1px 5px; color:#cfd6df}
-pre{
-  font-family:var(--mono); background:var(--ink-2); border:1px solid var(--line); border-radius:3px;
-  padding:14px 16px; overflow-x:auto; font-size:12.5px; line-height:1.65; color:var(--paper-dim);
-  margin:0 0 16px;
-}
-pre code{background:none; border:none; padding:0; font-size:inherit; color:inherit}
-.cmt{color:var(--paper-faint); font-style:italic}
-.str{color:#a7f3c9}
-.key{color:#cfd6df}
-
-/* ── блоки ─────────────────────────────────────────────────────────────── */
-.note{
-  border-left:2px solid var(--line); background:var(--ink-2); padding:13px 17px;
-  margin:0 0 16px; font-size:14px; color:var(--paper-dim); max-width:74ch;
-}
-.note b{color:var(--paper); font-weight:600}
-.note.warn{border-left-color:var(--assumed); background:var(--assumed-bg)}
-.note.stop{border-left-color:var(--unavailable); background:var(--unavailable-bg)}
-.note.ok{border-left-color:var(--confirmed); background:var(--confirmed-bg)}
-
-table{border-collapse:collapse; width:100%; max-width:900px; margin:0 0 18px; font-size:13.5px}
-th,td{border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top}
-th{background:var(--ink-3); font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--paper-faint); font-weight:500}
-td{background:var(--ink-2); color:var(--paper-dim)}
-td code{font-size:.85em}
-
-.chip{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:2px 8px; border-radius:2px; border:1px solid; white-space:nowrap}
-.chip.confirmed{color:var(--confirmed); border-color:var(--confirmed); background:var(--confirmed-bg)}
-.chip.assumed{color:var(--assumed); border-color:var(--assumed); background:var(--assumed-bg)}
-.chip.unavailable{color:var(--unavailable); border-color:var(--unavailable); background:var(--unavailable-bg)}
-
-.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px; margin:0 0 18px; max-width:900px}
-.card{border:1px solid var(--line); background:var(--ink-2); border-radius:3px; padding:15px 17px}
-.card .k{font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint)}
-.card .v{font-family:var(--serif); font-size:32px; line-height:1.1; margin:5px 0 3px}
-.card .d{font-size:12.5px; color:var(--paper-dim); line-height:1.5}
-
-details.faq{border:1px solid var(--line); border-radius:3px; background:var(--ink-2); margin-bottom:8px; max-width:900px}
-details.faq>summary{padding:12px 16px; cursor:pointer; font-size:14px; list-style:none; display:flex; gap:11px; align-items:center; color:var(--paper)}
-details.faq>summary::-webkit-details-marker{display:none}
-details.faq>summary::before{content:"▸"; color:var(--paper-faint); transition:transform .15s; font-family:var(--mono)}
-details.faq[open]>summary::before{transform:rotate(90deg)}
-details.faq .body{border-top:1px solid var(--line-soft); padding:14px 16px 4px}
-
-footer{border-top:1px solid var(--line); padding:22px 26px 50px; text-align:center; color:var(--paper-faint); font-family:var(--mono); font-size:11.5px}
-@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important; scroll-behavior:auto}}
+__STYLES__
 </style>
 </head>
 <body>
@@ -130,17 +15,16 @@ footer{border-top:1px solid var(--line); padding:22px 26px 50px; text-align:cent
   <div class="head-in">
     <div class="brand">
       <h1>Tutu MCP Proxy</h1>
-      <span class="sub">compacting · grounding · premise gate</span>
     </div>
     <p class="lede">
       Прокси перед <code>mcp.tutu.ru</code>: <b>те же 16 инструментов, то же поведение</b>, но
-      всегда-загруженный каталог <code>tools/list</code> на 27,8&nbsp;% меньше, а к нему добавлены
+      всегда-загруженный каталог <code>tools/list</code> на 27,9&nbsp;% меньше, а к нему добавлены
       два инструмента, которые не дают агенту сочинить цену, время или ссылку — и не дают ему
       искать по фильтру, который он выдумал сам.
     </p>
     <div class="cta">
-      <a class="btn primary" href="trace-viewer.html">Открыть трейс-вьювер →</a>
-      <a class="btn" href="https://github.com/Trum-ok/tutu-mcp-hackathon">Репозиторий</a>
+      <a class="btn primary" href="trace-viewer.html" target="_blank" rel="noopener noreferrer">Открыть трейс-вьювер<svg class="ext" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></a>
+      <a class="btn" href="https://github.com/Trum-ok/tutu-mcp-hackathon" target="_blank" rel="noopener noreferrer"><svg class="gh" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>GitHub<svg class="ext" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></a>
       <a class="btn" href="#quickstart">Быстрый старт</a>
     </div>
   </div>
@@ -176,20 +60,35 @@ footer{border-top:1px solid var(--line); padding:22px 26px 50px; text-align:cent
   <div class="cards">
     <div class="card">
       <div class="k">Каталог</div>
-      <div class="v">−27,8 %</div>
-      <div class="d">108&nbsp;539 → 78&nbsp;334 байт, и это <i>после</i> добавления двух собственных инструментов. С учётом блока <code>initialize</code> — 33,3&nbsp;%.</div>
+      <div class="v">−27,9 %</div>
+      <div class="d">110&nbsp;164 → 79&nbsp;411 байт, и это <i>после</i> добавления двух собственных инструментов. С учётом блока <code>initialize</code> — 33,1&nbsp;%. Воспроизводится: <code>tutu.py measure</code>.</div>
     </div>
     <div class="card">
       <div class="k">Выход агента</div>
-      <div class="v">grounding</div>
+      <div class="v"><span class="chip confirmed">grounding</span></div>
       <div class="d">Каждая цена, время, номер поезда/рейса и ссылка сверяется с сырым <code>tool_result</code>. Без LLM-судьи, детерминированно.</div>
     </div>
     <div class="card">
       <div class="k">Вход агента</div>
-      <div class="v">premise&nbsp;gate</div>
+      <div class="v"><span class="chip assumed">premise&nbsp;gate</span></div>
       <div class="d">Значение, сужающее поиск, обязано прийти от пользователя или из прошлого ответа сервера. Третьего источника нет.</div>
     </div>
   </div>
+
+  <div class="chart-h">Токены на <code>tools/list</code> до первого поиска</div>
+  <div class="chart">
+    <div class="chart-row">
+      <span class="chart-label">Прокси</span>
+      <span class="chart-bar proxy" style="width:212px"></span>
+      <span class="chart-value">~<b>19&nbsp;398</b> токенов</span>
+    </div>
+    <div class="chart-row">
+      <span class="chart-label">Без прокси</span>
+      <span class="chart-bar" style="width:320px"></span>
+      <span class="chart-value">~29&nbsp;329 токенов</span>
+    </div>
+  </div>
+  <p class="chart-caption"><i>Оценка tiktoken, не точный подсчёт провайдера (см. <a href="#faq">раздел 07</a>) — −34&nbsp;%. Прокси против прямого подключения к mcp.tutu.ru, воспроизводится: <code>make demo-traces</code>.</i></p>
 
   <h4>Что именно ужимается</h4>
   <p>
@@ -199,6 +98,19 @@ footer{border-top:1px solid var(--line); padding:22px 26px 50px; text-align:cent
     <code>required</code>, <code>format</code> и имена полей уходят клиенту байт в байт, это
     закреплено отдельным тестом.
   </p>
+
+  <div class="compare">
+    <div class="compare-item">
+      <div class="compare-h">До <span>· 9&nbsp;661 байт</span></div>
+      <pre><code>Search Russian Railways (РЖД) tickets between two cities. Returns the real departure &amp; arrival station names per offer (useful when a city has several stations — Москва has Курский / Ленинградский / Казанский). Each offer carries: `price`, a `fares` summary in the default `compact` view (`{count, price_from, price_to, currency, <span class="cmt">… ещё ~9,3 КБ</span></code></pre>
+    </div>
+    <div class="compare-item">
+      <div class="compare-h">После <span>· 1&nbsp;140 байт</span></div>
+      <pre><code>Search Russian Railways (РЖД) tickets between two cities. Each offer carries `price`, a `fares` summary (`{count, price_from, price_to, refundable_count, seat_categories, uncategorized_fares?}` — a count is a LOWER bound: `refundable_count: 0` means 'none confirmed refundable', not 'no refundable fare exists', and a `seat_categories` entry missing for сидячий/плацкарт/купе/СВ means not on sale ONLY when `uncategorized_fares` is absent), `legs[].segments[]` with carrier + train number + `vehicle_meta`, `search_results_url`, `checkout_url`, `checkout_ref`, and `details_ref` (→ `get_offer_details` for the full per-class ladder, → `get_rail_seatmap` for exact seats). Paginated: a page is a WINDOW over matched trains (`meta.total_matched`, `meta.has_more`) — never say a numbered train doesn't run from one page while `has_more` is true; pass `train_numbers` instead of paging blind. An empty `offers` with `meta.interchange_routes` populated means no DIRECT train that day; transfer plans are shown instead. Full field semantics, filter-interaction caveats and grounding rules: `get_rail_instructions`.</code></pre>
+    </div>
+  </div>
+  <p class="chart-caption"><i>Настоящий top-level <code>description</code> инструмента <code>search_rail</code> — из записанной фикстуры <code>tools/list</code> и <code>tutu_mcp/proxy/compact_tools.py</code>, не сокращённый пересказ.</i></p>
+
   <div class="note">
     <b>Практический смысл:</b> подключение прокси не требует правок в промптах клиента и не ломает
     существующие вызовы. Ужимание невидимо для кода — видно только по счётчику токенов.
@@ -315,14 +227,21 @@ uv run python tutu.py serve           <span class="cmt"># http://127.0.0.1:8800/
 
   <h3 id="groundedness">check_groundedness — проверка на выходе</h3>
   <pre><code>{
-  <span class="key">"answer_text"</span>: <span class="str">"Самый дешёвый — «Ласточка» 727А в 07:00, 1 150 ₽ ..."</span>,
-  <span class="key">"tool_result_json"</span>: [<span class="str">"{ ...сырой JSON первого tool_result... }"</span>, <span class="str">"{ ...второго... }"</span>]
+  <span class="key">"answer_text"</span>: <span class="str">"Самый дешёвый — «Ласточка» 727А в 07:00, 1 150 ₽ ..."</span>
 }</code></pre>
   <p>
     Из текста ответа извлекаются цены, времена, номера поездов и рейсов, URL — и каждое значение
-    проверяется на фактическое присутствие в переданном JSON. Никакой второй модели-судьи:
+    проверяется на фактическое присутствие в данных. Никакой второй модели-судьи:
     результат воспроизводим и его можно предъявить.
   </p>
+  <div class="note">
+    <b>Доказательства берутся у прокси, а не у агента.</b> Через прокси прошёл каждый
+    <code>tool_result</code> этой сессии, поэтому пересылать их обратно не нужно — раньше это
+    стоило агенту тысяч токенов на копирование и обрывалось на середине большого ответа.
+    Заодно закрыта дыра: набор доказательств больше не выбирает тот, кого проверяют.
+    Поле <code>tool_result_json</code> осталось необязательным — на случай данных,
+    которые через прокси не проходили.
+  </div>
   <table>
     <tr><th>Статус</th><th>Значит</th></tr>
     <tr><td><span class="chip confirmed">confirmed</span></td><td>Значение найдено в ответе сервера</td></tr>
@@ -393,8 +312,10 @@ make viewer        <span class="cmt"># из последнего настоящ�
     <tr><th>Переменная</th><th>Для чего</th><th>По умолчанию</th></tr>
     <tr><td><code>TUTU_PROXY_MODE</code></td><td><code>mock</code> (фикстуры, без сети) или <code>live</code></td><td><code>mock</code></td></tr>
     <tr><td><code>TUTU_UPSTREAM_URL</code></td><td>Адрес upstream MCP-сервера</td><td><code>https://mcp.tutu.ru/mcp</code></td></tr>
+    <tr><td><code>TUTU_UPSTREAM_TIMEOUT_S</code></td><td>Таймаут одного запроса к живому <code>mcp.tutu.ru</code>, секунды</td><td><code>20</code></td></tr>
     <tr><td><code>TUTU_FIXTURES_DIR</code></td><td>Где лежат записанные фикстуры</td><td><code>./fixtures</code></td></tr>
     <tr><td><code>TUTU_PROXY_HOST</code> / <code>TUTU_PROXY_PORT</code></td><td>Адрес прослушивания</td><td><code>127.0.0.1</code> / <code>8800</code></td></tr>
+    <tr><td><code>PORT</code></td><td>Фолбэк для PaaS (Render/Railway/Fly/…); <code>TUTU_PROXY_PORT</code> в приоритете</td><td>задаёт платформа</td></tr>
     <tr><td><code>OPENAI_API_KEY</code></td><td><b>Только эвалы</b> — агент под тестом и точный подсчёт токенов</td><td>—</td></tr>
     <tr><td><code>OPENAI_MODEL</code></td><td>Модель по умолчанию для эвалов</td><td><code>gpt-5</code></td></tr>
   </table>
@@ -406,7 +327,8 @@ make test          <span class="cmt"># весь pytest, целиком на фи
 make evals         <span class="cmt"># baseline против proxy (нужен OPENAI_API_KEY)</span>
 make evals-dry     <span class="cmt"># та же обвязка, скриптованный агент, без ключей</span>
 make fixtures      <span class="cmt"># перезаписать фикстуры с живого сервера</span>
-make viewer-demo   <span class="cmt"># trace-viewer.html из демо-трейсов</span></code></pre>
+make viewer-demo   <span class="cmt"># trace-viewer.html из демо-трейсов</span>
+make docs          <span class="cmt"># эта страница, site/index.html</span></code></pre>
 </section>
 
 <section id="faq">
@@ -472,7 +394,7 @@ make viewer-demo   <span class="cmt"># trace-viewer.html из демо-трей�
       исходной статье. Механизм общий, покрытие — нет.</li>
     <li><b><code>create_checkout_link</code> намеренно не тронут.</b> Это диспетчер покупки, и у
       него нет парного instructions-инструмента, куда переложить прозу.</li>
-    <li><b>Плата за сжатие названа.</b> <code>get_rail_instructions</code> растёт с 26 КБ до 49 КБ —
+    <li><b>Плата за сжатие названа.</b> <code>get_rail_instructions</code> растёт с 27,5 КБ до 50,3 КБ —
       её платит только та сессия, которая его вызвала, вместо всех сессий до первого поиска.</li>
     <li><b>Нет фикстуры на 429.</b> Спровоцировать её означало бы сжечь общий рейт-лимит хакатона
       всем остальным командам.</li>
@@ -491,5 +413,8 @@ make viewer-demo   <span class="cmt"># trace-viewer.html из демо-трей�
   <a href="https://github.com/Trum-ok/tutu-mcp-hackathon">github.com/Trum-ok/tutu-mcp-hackathon</a>
 </footer>
 
+<script>
+__SCRIPT__
+</script>
 </body>
 </html>
