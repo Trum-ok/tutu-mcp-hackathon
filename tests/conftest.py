@@ -10,7 +10,7 @@ REPO_FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 
 @pytest.fixture
 def repo_fixtures() -> FixtureStore:
-    """The real fixtures recorded from mcp.tutu.ru (`scripts/record_fixtures.py`)."""
+    """The real fixtures recorded from mcp.tutu.ru (`uv run python tutu.py record`)."""
     return FixtureStore(REPO_FIXTURES_DIR)
 
 

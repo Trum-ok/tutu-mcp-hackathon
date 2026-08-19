@@ -1,6 +1,6 @@
 """The eval set: user requests plus what a correct answer must satisfy.
 
-Dates and routes deliberately match what `scripts/record_fixtures.py` recorded, so
+Dates and routes deliberately match what `uv run python tutu.py record` recorded, so
 a mock run mostly hits fixtures on the first pass instead of drowning in misses.
 
 Scenario selection is biased toward the failure modes the source article and our
