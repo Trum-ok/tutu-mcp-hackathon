@@ -14,6 +14,7 @@ import base64
 import json
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -53,19 +54,35 @@ def load_styles() -> str:
     return inline_fonts(css.rstrip("\n"))
 
 
-def bake(data: dict[str, Any], template: str) -> str:
-    # Ассеты подставляются до данных: иначе строка вида `__STYLES__`, случайно
-    # попавшая в трейс, была бы принята за плейсхолдер.
-    assets = (
-        ("__STYLES__", load_styles(), "</style"),
-        ("__SCRIPT__", SCRIPT.read_text(encoding="utf-8").rstrip("\n"), "</script"),
-    )
+def inline_assets(template: str, assets: Sequence[tuple[str, str, str]], source: Path | str) -> str:
+    """Плейсхолдер → содержимое, с проверкой, что ассет не закрывает свой же блок.
+
+    Общая для вьювера и `pages/build.py`: обе страницы шьют CSS и JS одинаково,
+    и раньше обе несли по своей копии этого цикла — включая проверку `closer`,
+    единственную защиту от `</script>` внутри вшиваемого файла. Копия, у которой
+    такую проверку однажды забудут поправить, молча собирает битую страницу.
+    """
     for placeholder, asset, closer in assets:
         if placeholder not in template:
-            raise ValueError(f"{placeholder} not found in {TEMPLATE}")
+            raise ValueError(f"{placeholder} not found in {source}")
         if closer in asset.lower():
             raise ValueError(f"{placeholder} содержит `{closer}`: это закроет блок раньше времени")
         template = template.replace(placeholder, asset)
+    return template
+
+
+def page_assets(styles: str, script_path: Path) -> tuple[tuple[str, str, str], ...]:
+    """Пара ассетов, одинаковая для обеих страниц."""
+    return (
+        ("__STYLES__", styles, "</style"),
+        ("__SCRIPT__", script_path.read_text(encoding="utf-8").rstrip("\n"), "</script"),
+    )
+
+
+def bake(data: dict[str, Any], template: str) -> str:
+    # Ассеты подставляются до данных: иначе строка вида `__STYLES__`, случайно
+    # попавшая в трейс, была бы принята за плейсхолдер.
+    template = inline_assets(template, page_assets(load_styles(), SCRIPT), TEMPLATE)
 
     # `</script>` inside a tool result would close the data block early; escaping
     # `<` at the JSON level keeps the payload inert wherever it lands in the page.
