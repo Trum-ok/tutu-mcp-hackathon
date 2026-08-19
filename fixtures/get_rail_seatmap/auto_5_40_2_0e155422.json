@@ -1,0 +1,43 @@
+{
+  "tool": "get_rail_seatmap",
+  "scenario": "auto_5_40_2_0e155422",
+  "arguments": {
+    "details_ref": {
+      "transport": "railway",
+      "source": "seats-gateway.seats-by-params",
+      "departure_station_code": "2004001",
+      "arrival_station_code": "2001025",
+      "train_number": "119А",
+      "departure_at": "2026-08-25T00:12:00+03:00",
+      "price": {
+        "amount": 3231.58,
+        "currency": "RUB"
+      },
+      "title": "Поезд 119А",
+      "carriers": [
+        "ФПК"
+      ],
+      "duration_min": 575,
+      "arrival_at": "2026-08-25T09:47:00+03:00",
+      "review_summary": {
+        "rating": 7.5,
+        "review_count": 1399,
+        "label": "⭐ 7.5/10 · 1 399 отзывов",
+        "source": "offers-api.feedback",
+        "scope": "train",
+        "subject": "119А",
+        "scale": 10,
+        "feedback_key": "119А"
+      }
+    },
+    "max_cars": 5,
+    "max_seats_per_car": 40,
+    "view": "compact",
+    "task": "together",
+    "seats_together": 2
+  },
+  "result": {
+    "text": "{\"transport\":\"railway\",\"source\":{\"endpoint\":\"GET /api/seats-by-params\",\"read_only\":true,\"note\":\"Seat layout is read-only. `cars[].canvas.svg_url` points at the CDN-hosted vagon outline; the file is a graphical contour with no `<text>` seat numbers, so it is useful as an illustration but NOT as a vision-readable seat map — use `seats[].position` for any spatial reasoning.\"},\"train_meta\":{\"number\":\"119А\",\"name\":\"\",\"train_class\":\"common\",\"is_premium\":false,\"is_firm\":false,\"is_double_decker\":false},\"passenger_requirements\":[{\"passenger_type\":\"ADULT\",\"max_age\":200,\"needs_ticket\":true,\"chargeable\":true},{\"passenger_type\":\"CHILD\",\"max_age\":10,\"needs_ticket\":true,\"chargeable\":true},{\"passenger_type\":\"BABY\",\"max_age\":5,\"needs_ticket\":true,\"chargeable\":false}],\"pricing_note\":\"Prices in `fares[]` are pre-cart totals (fare + its service fee) and run BELOW the final cart price: the checkout applies Tutu's own, larger service fee (observed +6–8%). The `search_rail` listing prices DO match the cart. Use this map to compare seats and fare types (refundable vs non-refundable deltas are correct); quote the bookable total from the search listing, or say the exact final price appears in the cart.\",\"seatmap_status\":\"ok\",\"task\":\"together\",\"seats_together\":2,\"seats_considered\":95,\"groups_by_car_type\":{\"RESERVED_SEAT\":[{\"car_number\":\"11\",\"car_type\":\"RESERVED_SEAT\",\"compartment_number\":1,\"seat_numbers\":[\"2\",\"4\"],\"seats\":[{\"number\":\"2\",\"type\":\"UPPER\",\"group_index\":1},{\"number\":\"4\",\"type\":\"UPPER\",\"group_index\":1}],\"spread_px\":36.0,\"total_price\":{\"amount\":6686.0,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"3Б\",\"side\":\"MAIN\",\"gender\":\"NO_GENDER\"},{\"car_number\":\"11\",\"car_type\":\"RESERVED_SEAT\",\"compartment_number\":2,\"seat_numbers\":[\"6\",\"8\"],\"seats\":[{\"number\":\"6\",\"type\":\"UPPER\",\"group_index\":1},{\"number\":\"8\",\"type\":\"UPPER\",\"group_index\":1}],\"spread_px\":36.0,\"total_price\":{\"amount\":6686.0,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"3Б\",\"side\":\"MAIN\",\"gender\":\"NO_GENDER\"},{\"car_number\":\"14\",\"car_type\":\"RESERVED_SEAT\",\"compartment_number\":5,\"seat_numbers\":[\"18\",\"20\"],\"seats\":[{\"number\":\"18\",\"type\":\"UPPER\",\"group_index\":1},{\"number\":\"20\",\"type\":\"UPPER\",\"group_index\":1}],\"spread_px\":36.0,\"total_price\":{\"amount\":6686.0,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"3Э\",\"side\":\"MAIN\",\"gender\":\"NO_GENDER\"},{\"car_number\":\"14\",\"car_type\":\"RESERVED_SEAT\",\"compartment_number\":1,\"seat_numbers\":[\"2\",\"4\"],\"seats\":[{\"number\":\"2\",\"type\":\"UPPER\",\"group_index\":1},{\"number\":\"4\",\"type\":\"UPPER\",\"group_index\":1}],\"spread_px\":36.0,\"total_price\":{\"amount\":6686.0,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"3Э\",\"side\":\"MAIN\",\"gender\":\"NO_GENDER\"}]},\"groups_found_by_car_type\":{\"RESERVED_SEAT\":11},\"note\":\"Sets of 2 free seats that share ONE section of one car, cheapest-first within each car category. `total_price` is the cheapest adult total the party can actually be sold at, priced in the one `total_fare_type` all its seats share — checkout takes a single fare type for the whole selection, so quote that type with the price (same pre-cart caveat as every seatmap price, see `pricing_note`). A section is upstream's own `compartment_number`, split by deck and, in плацкарт, by compartment-vs-side berths — so a group is never spread across floors or across the passage. `spread_px` is the widest distance between two seats of the group (smaller = tighter). RESERVED_SEAT (плацкарт): a group is ONE section, and compartment berths are never mixed with side berths («боковушки») even though upstream numbers them into the same section — `side` says which.\"}",
+    "is_error": false
+  }
+}

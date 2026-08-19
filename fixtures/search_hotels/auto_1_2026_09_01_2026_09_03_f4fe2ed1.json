@@ -1,0 +1,30 @@
+{
+  "tool": "search_hotels",
+  "scenario": "auto_1_2026_09_01_2026_09_03_f4fe2ed1",
+  "arguments": {
+    "check_in": "2026-09-01",
+    "check_out": "2026-09-03",
+    "checkin_date": null,
+    "checkout_date": null,
+    "city_name": "Санкт-Петербург",
+    "geo_id": null,
+    "adults": 1,
+    "children_ages": [],
+    "page": 8,
+    "page_size": 30,
+    "stars": null,
+    "price_max": null,
+    "meals": null,
+    "hotel_types": null,
+    "min_rating": null,
+    "free_cancellation": null,
+    "breakfast_included": null,
+    "hotel_amenities": null,
+    "room_amenities": null,
+    "view": "compact"
+  },
+  "result": {
+    "text": "{\"hotels\":[],\"stay\":{\"check_in\":\"2026-09-01\",\"check_out\":\"2026-09-03\",\"nights\":2},\"meta\":{\"search_id\":\"c48f4efe5798af781179843642d754ec\",\"page\":8,\"page_size\":30,\"total_returned\":0,\"has_more\":false,\"geo_id\":\"2656915\",\"resolved_geo\":{\"geo_id\":\"2656915\",\"name\":\"Санкт-Петербург\",\"country\":\"Россия\",\"region\":\"Санкт-Петербург\",\"geo_type\":\"locality\",\"hotels_count\":43084},\"filters_applied\":{\"option_filters\":[],\"range_filters\":[],\"button_filters\":[],\"quick_filters_order\":[],\"changes\":[]},\"post_filter_dropped_over_cap\":0,\"post_filter_dropped_no_free_cancellation\":0,\"post_filter_dropped_no_breakfast\":0}}",
+    "is_error": false
+  }
+}
