@@ -79,6 +79,20 @@ class BackendCorruptError(BackendError):
     status = "fixture_corrupt"
 
 
+class BackendUnknownToolError(BackendError):
+    """The call named a tool this backend does not serve at all.
+
+    Kept apart from `BackendMissError` because the two send the caller in
+    opposite directions: a miss is a hole in what we recorded and is closed by
+    recording it, while this one says the name itself is wrong and no amount of
+    recording will help. Reported to the agent as its own status so a model that
+    invented a tool name gets told so, instead of being pointed at
+    `tutu.py record` for a tool that does not exist.
+    """
+
+    status = "unknown_tool"
+
+
 class BackendTimeoutError(BackendError):
     """The backend didn't answer within its configured timeout."""
 
@@ -95,6 +109,7 @@ ERROR_STATUSES = frozenset(
     {
         BackendMissError.status,
         BackendCorruptError.status,
+        BackendUnknownToolError.status,
         BackendTimeoutError.status,
         BackendUnavailableError.status,
     }
