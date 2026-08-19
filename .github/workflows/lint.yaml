@@ -5,7 +5,7 @@ on:
   pull_request:
 
 env:
-  LINT_PATHS: tutu_mcp evals scripts tests
+  LINT_PATHS: tutu.py tutu_mcp evals viewer tests
 
 jobs:
   lint:
@@ -28,4 +28,4 @@ jobs:
         run: uv run ruff format --check $LINT_PATHS
 
       - name: ty
-        run: uv run ty check tutu_mcp evals
+        run: uv run ty check tutu.py tutu_mcp evals viewer

@@ -47,8 +47,7 @@ local/
 .ruff_cache/
 
 # Eval run output
-eval-results.json
-eval-results.demo.json
+out/
 viewer/trace-viewer.html
 
 # Working notes, not for the judges

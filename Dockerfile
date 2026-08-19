@@ -24,4 +24,7 @@ ENV TUTU_PROXY_MODE=mock \
 
 EXPOSE 8800
 
+# `tutu.py serve` is the documented entrypoint locally, but that CLI imports
+# `evals` at module level and this image deliberately ships the proxy alone —
+# so it runs the same server through the module the CLI itself calls.
 CMD ["uv", "run", "--no-dev", "python", "-m", "tutu_mcp.main"]

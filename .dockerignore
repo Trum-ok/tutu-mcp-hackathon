@@ -10,7 +10,6 @@ __pycache__/
 docs/
 evals/
 tests/
-scripts/
 viewer/
 site/
-eval-results*.json
+out/

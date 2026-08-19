@@ -2,7 +2,7 @@
 
 Run once (or after upstream changes) against the live server:
 
-    uv run python scripts/record_fixtures.py
+    uv run python tutu.py record
 
 Deliberately sequential with a short delay between calls — the hackathon's
 rate limit is shared across every team, so this script is polite by design
@@ -17,11 +17,7 @@ hand-authored (or captured incidentally) instead of recorded here.
 
 import asyncio
 import json
-import sys
-from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tutu_mcp.config import load_settings
 from tutu_mcp.replay.store import FixtureStore
@@ -55,7 +51,7 @@ async def record(
         return None
 
 
-async def main() -> None:
+async def record_fixtures() -> None:
     settings = load_settings()
     store = FixtureStore(settings.fixtures_dir)
 
@@ -247,7 +243,3 @@ async def main() -> None:
             print("  ! no hotel offers recorded, skipping dependent hotel fixtures")
 
         print("Done.")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

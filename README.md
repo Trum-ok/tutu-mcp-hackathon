@@ -1,5 +1,9 @@
 # tutu-mcp-proxy
 
+[![lint](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/lint.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/lint.yaml)
+[![tests](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/tests.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/tests.yaml)
+[![pages](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/pages.yaml/badge.svg)](https://github.com/Trum-ok/tutu-mcp-hackathon/actions/workflows/pages.yaml)
+
 Compacting/grounding MCP proxy in front of [`mcp.tutu.ru`](https://mcp.tutu.ru/mcp), built for
 Tutu's hackathon (track 2 — "оптимизация инструментов"). Same 16 tools, same behavior, plus:
 
@@ -36,6 +40,7 @@ tutu_mcp/                  the proxy server itself — this is what `make run-mo
   replay/store.py          on-disk fixture store (VCR-style: match by tool + exact arguments)
   replay/mock_client.py    mock backend — serves fixtures/ instead of calling Tutu
   replay/recording.py      records fixtures/ off the live server while a run proceeds
+  replay/bootstrap.py      the one-shot recording pass that creates fixtures/ in the first place
   proxy/compact_tools.py   description trimming + appendix splicing
   proxy/server.py          builds the proxy MCPServer (tools/list, tools/call, check_groundedness)
   groundedness.py          claim extraction + grounding check, used by proxy/server.py
@@ -50,13 +55,13 @@ evals/                     the harness that measures the proxy — imports it, n
   runner.py                drives one scenario, collects a transcript
   checks.py, report.py     per-scenario metrics and the aggregate report
   tokens.py                token accounting (exact via the API, or offline via tiktoken)
+  run.py                   one run end to end: builds agent + counter + surfaces, then measures
+  demo.py                  hand-written traces over real fixtures (no model needed)
   config.py                OPENAI_* credentials and model default — harness-only
-scripts/record_fixtures.py   records fixtures/ from the live server
-scripts/run_evals.py          runs the baseline-vs-proxy comparison
-scripts/demo_traces.py        hand-written traces over real fixtures (no model needed)
-viewer/template.html          trace viewer UI; build.py bakes an eval run into it
-fixtures/                     recorded responses (tools/list, instructions, searches, ...)
-tests/                         pytest suite, runs entirely against recorded fixtures (no network)
+tutu.py                    the CLI over both: serve / evals / record / demo / viewer
+viewer/template.html       trace viewer UI; build.py bakes an eval run into it
+fixtures/                  recorded responses (tools/list, instructions, searches, ...)
+tests/                     pytest suite, runs entirely against recorded fixtures (no network)
 ```
 
 ## Configuration
@@ -86,15 +91,15 @@ The runner checks for the key before the first request and refuses up front with
 rather than dying on an auth error several scenarios into a run that has already spent time and
 (in `--live`) upstream rate limit.
 
-Not sure which model ids the key can reach? `uv run python scripts/run_evals.py --list-models`
+Not sure which model ids the key can reach? `uv run python tutu.py evals --list-models`
 prints them straight from the API — don't guess from documentation.
 
 ## Running
 
 ```bash
 uv sync
-uv run python -m tutu_mcp.main            # mock mode (default) — http://127.0.0.1:8800/mcp
-TUTU_PROXY_MODE=live uv run python -m tutu_mcp.main   # proxies the real mcp.tutu.ru
+uv run python tutu.py serve            # mock mode (default) — http://127.0.0.1:8800/mcp
+TUTU_PROXY_MODE=live uv run python tutu.py serve   # proxies the real mcp.tutu.ru
 ```
 
 Point any MCP client at `http://127.0.0.1:8800/mcp` (Streamable HTTP, no auth — matches upstream).
@@ -102,7 +107,7 @@ Point any MCP client at `http://127.0.0.1:8800/mcp` (Streamable HTTP, no auth �
 ## Fixtures
 
 ```bash
-uv run python scripts/record_fixtures.py
+uv run python tutu.py record
 ```
 
 Sequential, rate-limit-polite, records `tools/list` + all 6 instructions tools + representative
@@ -117,11 +122,11 @@ limit for every other team, so that one needs to be hand-authored instead.
 ## Evals — baseline vs proxy
 
 ```bash
-uv run python scripts/run_evals.py                     # fixtures + real model
-uv run python scripts/run_evals.py --agent scripted    # no model: harness self-check
-uv run python scripts/run_evals.py --live --record-missing  # fill fixture gaps, once
-uv run python scripts/run_evals.py --model <id>        # per-model breakdown
-uv run python scripts/run_evals.py --list-models       # what this key can reach
+uv run python tutu.py evals                     # fixtures + real model
+uv run python tutu.py evals --agent scripted    # no model: harness self-check
+uv run python tutu.py evals --live --record-missing  # fill fixture gaps, once
+uv run python tutu.py evals --model <id>        # per-model breakdown
+uv run python tutu.py evals --list-models       # what this key can reach
 ```
 
 Runs every scenario in `evals/scenarios.py` through two tool surfaces — `baseline` (raw
@@ -136,7 +141,7 @@ questionnaire — how many clarifying questions were asked on scenarios that had
 tool-surface cost in tokens (the number paid on every session before any
 search), task success against per-scenario deterministic checks, pooled groundedness rate, tool
 calls, tool errors, and p50/p95 latency — plus a per-scenario matrix showing exactly where the two
-variants diverge. Full detail lands in `eval-results.json` for the trace viewer to render.
+variants diverge. Full detail lands in `out/eval-results.json` for the trace viewer to render.
 
 Two honesty notes built into the output:
 
@@ -171,7 +176,7 @@ against a default of `10` is a genuinely different request and correctly stays a
 ## Trace viewer
 
 ```bash
-make viewer        # from the last real eval run (eval-results.json)
+make viewer        # from the last real eval run (out/eval-results.json)
 make viewer-demo   # from hand-written demo traces — no model, no key needed
 ```
 
@@ -195,7 +200,7 @@ Three things the UI is careful about:
 - **`assumed` is not green.** A declared assumption is disclosed, not proven, so it gets its own
   colour and never counts toward the groundedness rate.
 
-`make demo-traces` writes `eval-results.demo.json`, deliberately *not* `eval-results.json`: real
+`make demo-traces` writes `out/eval-results.demo.json`, deliberately *not* `out/eval-results.json`: real
 runs own that path, and two people generating different things into one file overwrite each
 other's work. The demo answers are hand-written over the real recorded fixtures, so every
 "confirmed" claim is genuinely confirmed against real Tutu data and every fabricated one is
@@ -248,3 +253,11 @@ make demo-traces   # hand-written traces over real fixtures, no model
 make viewer        # trace-viewer.html from the last real run
 make viewer-demo   # trace-viewer.html from the demo traces
 ```
+
+## Команда
+
+<!-- TODO: заполнить -->
+
+| | Роль | Контакт |
+|---|---|---|
+| | | |

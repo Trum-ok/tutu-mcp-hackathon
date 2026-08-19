@@ -244,13 +244,13 @@ footer{border-top:1px solid var(--line); padding:22px 26px 50px; text-align:cent
   <pre><code>git clone https://github.com/Trum-ok/tutu-mcp-hackathon
 cd tutu-mcp-hackathon
 uv sync
-uv run python -m tutu_mcp.main        <span class="cmt"># http://127.0.0.1:8800/mcp</span></code></pre>
+uv run python tutu.py serve           <span class="cmt"># http://127.0.0.1:8800/mcp</span></code></pre>
   <p>
     По умолчанию поднимается <b>mock-режим</b>: ответы берутся из записанных фикстур, сеть не
     трогается вовсе. Это безопасно гонять как угодно часто — общий рейт-лимит хакатона не
     расходуется. Чтобы проксировать настоящий Туту:
   </p>
-  <pre><code>TUTU_PROXY_MODE=live uv run python -m tutu_mcp.main</code></pre>
+  <pre><code>TUTU_PROXY_MODE=live uv run python tutu.py serve</code></pre>
   <div class="note ok">
     <b>Проверка, что всё поднялось:</b> в логе появятся две строки — режим и адрес. Клиент после
     подключения должен показать <b>18 инструментов</b>: 16 родных Туту плюс
@@ -399,6 +399,7 @@ make viewer        <span class="cmt"># из последнего настоящ�
     <tr><td><code>OPENAI_MODEL</code></td><td>Модель по умолчанию для эвалов</td><td><code>gpt-5</code></td></tr>
   </table>
   <h4>Команды</h4>
+  <p>Всё в репозитории запускается одной точкой входа — <code>uv run python tutu.py --help</code>. Короткие обёртки лежат в <code>Makefile</code>:</p>
   <pre><code>make run-mock      <span class="cmt"># прокси на фикстурах</span>
 make run-live      <span class="cmt"># прокси на настоящий mcp.tutu.ru</span>
 make test          <span class="cmt"># весь pytest, целиком на фикстурах, без сети</span>

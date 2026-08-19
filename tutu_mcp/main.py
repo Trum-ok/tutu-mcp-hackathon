@@ -1,4 +1,4 @@
-"""Entrypoint: `uv run python -m tutu_mcp.main`.
+"""Entrypoint: `uv run python tutu.py serve`.
 
 TUTU_PROXY_MODE=mock (default) serves recorded fixtures — no network calls,
 safe to hammer during a demo. TUTU_PROXY_MODE=live proxies the real
@@ -15,7 +15,7 @@ from tutu_mcp.replay.store import FixtureStore
 from tutu_mcp.upstream.client import UpstreamClient
 
 
-async def _run() -> None:
+async def serve() -> None:
     settings = load_settings()
 
     if settings.mode == "mock":
@@ -34,7 +34,7 @@ async def _run() -> None:
 
 
 def main() -> None:
-    anyio.run(_run)
+    anyio.run(serve)
 
 
 if __name__ == "__main__":

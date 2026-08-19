@@ -3,7 +3,7 @@
 # The viewer is BUILT here rather than committed: `viewer/trace-viewer.html` is a
 # generated artifact (and gitignored), so baking it in CI keeps one source of
 # truth. It is built from the hand-written demo traces, which need no model and
-# no API key — a real eval run's `eval-results.json` never leaves a laptop.
+# no API key — a real eval run's `out/eval-results.json` never leaves a laptop.
 name: pages
 
 on:
@@ -37,9 +37,9 @@ jobs:
 
       - name: Build the trace viewer from demo traces
         run: |
-          uv run python scripts/demo_traces.py
-          uv run python viewer/build.py \
-            --data eval-results.demo.json \
+          uv run python tutu.py demo
+          uv run python tutu.py viewer \
+            --data out/eval-results.demo.json \
             --out site/trace-viewer.html
 
       # The public MCP endpoint is a repo variable, so redeploying the server

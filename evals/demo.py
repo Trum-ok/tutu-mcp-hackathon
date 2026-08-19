@@ -1,4 +1,4 @@
-"""Generates a demo `eval-results.json` without calling any model.
+"""Generates `out/eval-results.demo.json` without calling any model.
 
 The trace viewer needs traces to render, and a real run needs an OpenAI key plus
 several minutes. This builds a small set of hand-authored answers over the REAL
@@ -12,18 +12,14 @@ produced by a model. The agent label in the output says `demo:hand-written`, and
 the viewer prints it in the header, so a demo dataset can never be mistaken on
 screen for a real eval run.
 
-    uv run python scripts/demo_traces.py
+    uv run python tutu.py demo
 """
 
-import asyncio
 import json
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from evals import report as report_mod
 from evals.agent import ToolExecutor
@@ -166,7 +162,7 @@ def build_plans(store: FixtureStore) -> dict[tuple[str, str], Plan]:
     }
 
 
-async def main() -> int:
+async def run_demo() -> int:
     settings = load_settings()
     store = FixtureStore(settings.fixtures_dir)
     backend = MockUpstreamClient(store)
@@ -183,14 +179,10 @@ async def main() -> int:
         token_counter=OfflineTokenCounter(),
     )
 
-    # Deliberately NOT eval-results.json: that path belongs to real runs, and two
+    # Deliberately NOT out/eval-results.json: that path belongs to real runs, and two
     # people generating different things into one file overwrite each other's work.
-    out = Path("eval-results.demo.json")
+    out = Path("out/eval-results.demo.json")
     report_mod.write_json(run, out)
     print(report_mod.render_console(run))
     print(f"\nДемо-трейсы записаны в {out} (агент: {agent.label} — это НЕ замер)")
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
