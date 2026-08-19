@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutu MCP Proxy · Документация</title>
+<meta name="description" content="Пользовательская документация compacting/grounding MCP-прокси перед mcp.tutu.ru">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Тот же язык, что и у трейс-вьювера: почти монохромные чернила, три
+   семантических цвета несут весь смысл и ничто с ними не конкурирует. */
+:root{
+  --ink:#0d0f12; --ink-2:#14171c; --ink-3:#1c2027; --line:#282e37; --line-soft:#1f242b;
+  --paper:#e8e4dc; --paper-dim:#9aa1ab; --paper-faint:#5f6873;
+  --confirmed:#4ade80; --confirmed-bg:rgba(74,222,128,.13);
+  --assumed:#fbbf24;  --assumed-bg:rgba(251,191,36,.14);
+  --unavailable:#fb5f4f; --unavailable-bg:rgba(251,95,79,.16);
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:20px}
+html,body{margin:0}
+body{
+  background:var(--ink); color:var(--paper); font-family:var(--sans);
+  font-size:15px; line-height:1.7; -webkit-font-smoothing:antialiased;
+}
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:99; opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+a{color:var(--paper); text-decoration-color:var(--paper-faint); text-underline-offset:3px}
+a:hover{text-decoration-color:var(--paper)}
+
+/* ── шапка ─────────────────────────────────────────────────────────────── */
+header{border-bottom:1px solid var(--line); background:linear-gradient(180deg,var(--ink-2),var(--ink))}
+.head-in{max-width:1180px; margin:0 auto; padding:30px 26px 26px}
+.brand{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.brand h1{font-family:var(--serif); font-weight:400; font-size:38px; margin:0; line-height:1}
+.brand .sub{font-family:var(--mono); font-size:11px; color:var(--paper-faint); letter-spacing:.14em; text-transform:uppercase}
+.lede{max-width:70ch; margin:16px 0 0; color:var(--paper-dim); font-size:16.5px}
+.lede b{color:var(--paper); font-weight:500}
+.cta{display:flex; gap:10px; flex-wrap:wrap; margin-top:22px}
+.btn{
+  font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+  border:1px solid var(--line); border-radius:2px; padding:10px 17px; text-decoration:none;
+  color:var(--paper-dim); background:var(--ink-2); transition:color .15s,border-color .15s,background .15s;
+}
+.btn:hover{color:var(--paper); border-color:var(--paper-faint); background:var(--ink-3)}
+.btn.primary{color:var(--ink); background:var(--paper); border-color:var(--paper); font-weight:600}
+.btn.primary:hover{background:#fff; color:var(--ink)}
+
+/* ── раскладка ─────────────────────────────────────────────────────────── */
+.wrap{max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(210px,250px) 1fr; gap:0}
+@media (max-width:920px){.wrap{grid-template-columns:1fr} nav.toc{display:none}}
+nav.toc{border-right:1px solid var(--line); padding:26px 0 60px; position:sticky; top:0; align-self:start; max-height:100vh; overflow-y:auto}
+.toc-h{font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint); padding:0 22px 12px}
+.toc a{
+  display:block; padding:7px 22px; color:var(--paper-dim); text-decoration:none;
+  font-size:13px; border-left:2px solid transparent; transition:background .15s,color .15s;
+}
+.toc a:hover{background:var(--ink-2); color:var(--paper)}
+.toc a.sub2{padding-left:34px; font-size:12.5px; color:var(--paper-faint)}
+main{padding:30px 34px 90px; min-width:0}
+@media (max-width:920px){main{padding:26px 20px 70px}}
+
+section{scroll-margin-top:20px; margin-bottom:52px}
+h2{font-family:var(--serif); font-weight:400; font-size:29px; margin:0 0 6px; line-height:1.15}
+h2 .num{font-family:var(--mono); font-size:12px; color:var(--paper-faint); letter-spacing:.1em; display:block; margin-bottom:7px; text-transform:uppercase}
+h3{font-family:var(--serif); font-weight:400; font-size:21px; margin:30px 0 8px}
+h4{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--paper-faint); margin:22px 0 7px; font-weight:500}
+p{margin:0 0 13px; max-width:74ch}
+ul,ol{max-width:74ch; padding-left:20px; margin:0 0 13px}
+li{margin-bottom:6px}
+code{font-family:var(--mono); font-size:.87em; background:var(--ink-3); border:1px solid var(--line-soft); border-radius:2px; padding:1px 5px; color:#cfd6df}
+pre{
+  font-family:var(--mono); background:var(--ink-2); border:1px solid var(--line); border-radius:3px;
+  padding:14px 16px; overflow-x:auto; font-size:12.5px; line-height:1.65; color:var(--paper-dim);
+  margin:0 0 16px;
+}
+pre code{background:none; border:none; padding:0; font-size:inherit; color:inherit}
+.cmt{color:var(--paper-faint); font-style:italic}
+.str{color:#a7f3c9}
+.key{color:#cfd6df}
+
+/* ── блоки ─────────────────────────────────────────────────────────────── */
+.note{
+  border-left:2px solid var(--line); background:var(--ink-2); padding:13px 17px;
+  margin:0 0 16px; font-size:14px; color:var(--paper-dim); max-width:74ch;
+}
+.note b{color:var(--paper); font-weight:600}
+.note.warn{border-left-color:var(--assumed); background:var(--assumed-bg)}
+.note.stop{border-left-color:var(--unavailable); background:var(--unavailable-bg)}
+.note.ok{border-left-color:var(--confirmed); background:var(--confirmed-bg)}
+
+table{border-collapse:collapse; width:100%; max-width:900px; margin:0 0 18px; font-size:13.5px}
+th,td{border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top}
+th{background:var(--ink-3); font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--paper-faint); font-weight:500}
+td{background:var(--ink-2); color:var(--paper-dim)}
+td code{font-size:.85em}
+
+.chip{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:2px 8px; border-radius:2px; border:1px solid; white-space:nowrap}
+.chip.confirmed{color:var(--confirmed); border-color:var(--confirmed); background:var(--confirmed-bg)}
+.chip.assumed{color:var(--assumed); border-color:var(--assumed); background:var(--assumed-bg)}
+.chip.unavailable{color:var(--unavailable); border-color:var(--unavailable); background:var(--unavailable-bg)}
+
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px; margin:0 0 18px; max-width:900px}
+.card{border:1px solid var(--line); background:var(--ink-2); border-radius:3px; padding:15px 17px}
+.card .k{font-family:var(--mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint)}
+.card .v{font-family:var(--serif); font-size:32px; line-height:1.1; margin:5px 0 3px}
+.card .d{font-size:12.5px; color:var(--paper-dim); line-height:1.5}
+
+details.faq{border:1px solid var(--line); border-radius:3px; background:var(--ink-2); margin-bottom:8px; max-width:900px}
+details.faq>summary{padding:12px 16px; cursor:pointer; font-size:14px; list-style:none; display:flex; gap:11px; align-items:center; color:var(--paper)}
+details.faq>summary::-webkit-details-marker{display:none}
+details.faq>summary::before{content:"▸"; color:var(--paper-faint); transition:transform .15s; font-family:var(--mono)}
+details.faq[open]>summary::before{transform:rotate(90deg)}
+details.faq .body{border-top:1px solid var(--line-soft); padding:14px 16px 4px}
+
+footer{border-top:1px solid var(--line); padding:22px 26px 50px; text-align:center; color:var(--paper-faint); font-family:var(--mono); font-size:11.5px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important; scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-in">
+    <div class="brand">
+      <h1>Tutu MCP Proxy</h1>
+      <span class="sub">compacting · grounding · premise gate</span>
+    </div>
+    <p class="lede">
+      Прокси перед <code>mcp.tutu.ru</code>: <b>те же 16 инструментов, то же поведение</b>, но
+      всегда-загруженный каталог <code>tools/list</code> на 27,8&nbsp;% меньше, а к нему добавлены
+      два инструмента, которые не дают агенту сочинить цену, время или ссылку — и не дают ему
+      искать по фильтру, который он выдумал сам.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="trace-viewer.html">Открыть трейс-вьювер →</a>
+      <a class="btn" href="https://github.com/Trum-ok/tutu-mcp-hackathon">Репозиторий</a>
+      <a class="btn" href="#quickstart">Быстрый старт</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <div class="toc-h">Содержание</div>
+  <a href="#why">01 · Зачем это</a>
+  <a href="#quickstart">02 · Быстрый старт</a>
+  <a href="#tools">03 · Инструменты</a>
+  <a class="sub2" href="#assess">assess_request</a>
+  <a class="sub2" href="#groundedness">check_groundedness</a>
+  <a href="#workflow">04 · Как это выглядит в работе</a>
+  <a href="#viewer">05 · Трейс-вьювер</a>
+  <a href="#config">06 · Настройка</a>
+  <a href="#faq">07 · Вопросы и ошибки</a>
+  <a href="#limits">08 · Границы честности</a>
+</nav>
+
+<main>
+
+<section id="why">
+  <h2><span class="num">01</span>Зачем это</h2>
+  <p>
+    Агент, подключённый к MCP-серверу Туту напрямую, платит две цены. Первая — размер:
+    <code>tools/list</code> отдаёт ~110&nbsp;КБ (~30K токенов) ещё до того, как пользователь что-то
+    спросил. Вторая — доверие: агент отвечает связным текстом независимо от того, было ли значение
+    в ответе сервера или он его достроил по общему знанию.
+  </p>
+  <p>Прокси закрывает обе, не меняя контракт: клиент видит те же имена инструментов и те же схемы аргументов.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="k">Каталог</div>
+      <div class="v">−27,8 %</div>
+      <div class="d">108&nbsp;539 → 78&nbsp;334 байт, и это <i>после</i> добавления двух собственных инструментов. С учётом блока <code>initialize</code> — 33,3&nbsp;%.</div>
+    </div>
+    <div class="card">
+      <div class="k">Выход агента</div>
+      <div class="v">grounding</div>
+      <div class="d">Каждая цена, время, номер поезда/рейса и ссылка сверяется с сырым <code>tool_result</code>. Без LLM-судьи, детерминированно.</div>
+    </div>
+    <div class="card">
+      <div class="k">Вход агента</div>
+      <div class="v">premise&nbsp;gate</div>
+      <div class="d">Значение, сужающее поиск, обязано прийти от пользователя или из прошлого ответа сервера. Третьего источника нет.</div>
+    </div>
+  </div>
+
+  <h4>Что именно ужимается</h4>
+  <p>
+    Урезаются <b>описания</b>, а не схемы. Многословная проза про пограничные случаи переезжает в
+    <i>результат вызова</i> парного инструмента <code>get_&lt;domain&gt;_instructions</code> — то
+    есть оплачивается только той сессией, которая её реально читает. Тип поля, <code>enum</code>,
+    <code>required</code>, <code>format</code> и имена полей уходят клиенту байт в байт, это
+    закреплено отдельным тестом.
+  </p>
+  <div class="note">
+    <b>Практический смысл:</b> подключение прокси не требует правок в промптах клиента и не ломает
+    существующие вызовы. Ужимание невидимо для кода — видно только по счётчику токенов.
+  </div>
+</section>
+
+<section id="quickstart">
+  <h2><span class="num">02</span>Быстрый старт</h2>
+  <p>
+    Прокси говорит по Streamable HTTP без авторизации — ровно как upstream. Ключи OpenAI нужны
+    <b>только</b> для прогона эвалов; самому серверу они не нужны.
+  </p>
+
+  <h3>Шаг 1 — адрес прокси</h3>
+  <p>
+    Ниже подставлен адрес развёрнутого экземпляра. Если вы поднимаете прокси у себя
+    (<a href="#local">шаг 3</a>), замените его на <code>http://127.0.0.1:8800/mcp</code>.
+  </p>
+  <pre><code>__DEPLOY_URL__</code></pre>
+
+  <h3>Шаг 2 — прописать его в клиенте</h3>
+  <h4>Claude Code</h4>
+  <pre><code>claude mcp add --transport http tutu __DEPLOY_URL__</code></pre>
+
+  <h4>Cursor · <code>~/.cursor/mcp.json</code></h4>
+  <pre><code>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"tutu"</span>: { <span class="key">"url"</span>: <span class="str">"__DEPLOY_URL__"</span> }
+  }
+}</code></pre>
+
+  <h4>Claude Desktop · <code>claude_desktop_config.json</code></h4>
+  <pre><code>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"tutu"</span>: {
+      <span class="key">"command"</span>: <span class="str">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"mcp-remote"</span>, <span class="str">"__DEPLOY_URL__"</span>]
+    }
+  }
+}</code></pre>
+
+  <h3 id="local">Шаг 3 — запустить у себя (опционально)</h3>
+  <pre><code>git clone https://github.com/Trum-ok/tutu-mcp-hackathon
+cd tutu-mcp-hackathon
+uv sync
+uv run python -m tutu_mcp.main        <span class="cmt"># http://127.0.0.1:8800/mcp</span></code></pre>
+  <p>
+    По умолчанию поднимается <b>mock-режим</b>: ответы берутся из записанных фикстур, сеть не
+    трогается вовсе. Это безопасно гонять как угодно часто — общий рейт-лимит хакатона не
+    расходуется. Чтобы проксировать настоящий Туту:
+  </p>
+  <pre><code>TUTU_PROXY_MODE=live uv run python -m tutu_mcp.main</code></pre>
+  <div class="note ok">
+    <b>Проверка, что всё поднялось:</b> в логе появятся две строки — режим и адрес. Клиент после
+    подключения должен показать <b>18 инструментов</b>: 16 родных Туту плюс
+    <code>assess_request</code> и <code>check_groundedness</code>.
+  </div>
+</section>
+
+<section id="tools">
+  <h2><span class="num">03</span>Инструменты</h2>
+  <p>
+    16 инструментов Туту проходят насквозь — те же имена, те же аргументы, те же результаты.
+    Добавлены два своих. Оба локальные: не ходят в сеть, не тратят рейт-лимит, отвечают мгновенно.
+  </p>
+
+  <table>
+    <tr><th>Инструмент</th><th>Когда вызывать</th><th>Что делает</th></tr>
+    <tr>
+      <td><code>assess_request</code></td>
+      <td><b>Первым</b>, до любого поиска</td>
+      <td>Говорит, каких параметров не хватает и что в самом запросе противоречиво</td>
+    </tr>
+    <tr>
+      <td><code>check_groundedness</code></td>
+      <td><b>Последним</b>, до отправки ответа</td>
+      <td>Сверяет черновик ответа с сырыми <code>tool_result</code></td>
+    </tr>
+  </table>
+
+  <h3 id="assess">assess_request — проверка на входе</h3>
+  <p>Передайте запрос пользователя дословно и вызовы, которые собираетесь сделать:</p>
+  <pre><code>{
+  <span class="key">"user_request"</span>: <span class="str">"Хочу в субботу 11 октября съездить из Москвы в Питер и вернуться вечером"</span>,
+  <span class="key">"planned_calls"</span>: [
+    { <span class="key">"tool"</span>: <span class="str">"search_rail"</span>,
+      <span class="key">"arguments"</span>: { <span class="key">"from"</span>: <span class="str">"Москва"</span>, <span class="key">"to"</span>: <span class="str">"Санкт-Петербург"</span>, <span class="key">"date"</span>: <span class="str">"2026-10-11"</span> } }
+  ]
+}</code></pre>
+  <p>В ответ приходит: какие параметры <b>блокирующие</b>, какие — безопасные умолчания, и есть ли противоречие внутри самого запроса. Вердикт <code>ask_user_first</code> означает: спросить пользователя <i>до</i> дорогих поисков, а не после того, как таблица уже построена на догадке.</p>
+  <div class="note warn">
+    <b>Проверка календаря.</b> «в субботу 11 октября», когда 11.10.2026 — воскресенье, помечается
+    как вероятная опечатка. Прокси <b>показывает</b> расхождение, но никогда не исправляет его
+    молча: выбор между датой и днём недели принадлежит пользователю.
+  </div>
+
+  <h4>Premise gate: три способа разрешить блокировку</h4>
+  <p>
+    Если аргумент, <b>сужающий</b> поиск, не пришёл ни от пользователя, ни из прошлого
+    <code>tool_result</code>, вызов возвращает <code>clarification_required</code> <i>вместо</i>
+    данных. Это сделано намеренно: уверенную сравнительную таблицу невозможно построить на
+    фильтре, которого никто не называл.
+  </p>
+  <ol>
+    <li><b>Спросить пользователя</b> — предпочтительный путь.</li>
+    <li><b>Объявить источник</b>, если пользователь всё-таки называл значение:
+      <code>_sources={"date": "user"}</code>.</li>
+    <li><b>Объявить допущение</b>: <code>_assume={"time_to": "концерт обычно заканчивается к 22:00"}</code>.
+      Тогда результат несёт преамбулу, <b>с которой ответ обязан начинаться</b>.</li>
+  </ol>
+  <p>
+    Оба поля вырезаются до того, как вызов уйдёт в Туту, — upstream-схемы не меняются.
+  </p>
+
+  <h3 id="groundedness">check_groundedness — проверка на выходе</h3>
+  <pre><code>{
+  <span class="key">"answer_text"</span>: <span class="str">"Самый дешёвый — «Ласточка» 727А в 07:00, 1 150 ₽ ..."</span>,
+  <span class="key">"tool_result_json"</span>: [<span class="str">"{ ...сырой JSON первого tool_result... }"</span>, <span class="str">"{ ...второго... }"</span>]
+}</code></pre>
+  <p>
+    Из текста ответа извлекаются цены, времена, номера поездов и рейсов, URL — и каждое значение
+    проверяется на фактическое присутствие в переданном JSON. Никакой второй модели-судьи:
+    результат воспроизводим и его можно предъявить.
+  </p>
+  <table>
+    <tr><th>Статус</th><th>Значит</th></tr>
+    <tr><td><span class="chip confirmed">confirmed</span></td><td>Значение найдено в ответе сервера</td></tr>
+    <tr><td><span class="chip assumed">assumed</span></td><td>Пришло из объявленного допущения — раскрыто, но не доказано</td></tr>
+    <tr><td><span class="chip unavailable">unavailable</span></td><td>В данных его нет. Это то, что иначе ушло бы пользователю как факт</td></tr>
+  </table>
+  <div class="note">
+    <b>Допущения агент не может спрятать.</b> Список допущений <code>check_groundedness</code>
+    берёт из состояния сессии, а не из аргументов вызова: агент, способный их не передать, мог бы
+    скрыть ровно то, что проверка создана вскрывать. Ответ, раскрывший допущение только в конце
+    или не раскрывший вовсе, проверку не проходит.
+  </div>
+</section>
+
+<section id="workflow">
+  <h2><span class="num">04</span>Как это выглядит в работе</h2>
+  <p>Полный цикл одного хода агента:</p>
+  <ol>
+    <li><code>assess_request</code> с дословным запросом → список блокирующих параметров и расхождений.</li>
+    <li>Если вердикт <code>ask_user_first</code> — задать вопрос <b>до</b> поисков.</li>
+    <li>Поиски (<code>search_rail</code>, <code>search_hotels</code>, …) — как обычно.</li>
+    <li>Наткнулись на <code>clarification_required</code> — разрешить одним из трёх способов выше.</li>
+    <li>Черновик ответа + <code>check_groundedness</code> со всеми сырыми <code>tool_result</code>.</li>
+    <li>Значения со статусом <code>unavailable</code> — убрать или честно назвать отсутствующими; допущения вынести в первое предложение.</li>
+  </ol>
+  <div class="note stop">
+    <b>Кейс, ради которого всё это.</b> Пустой отфильтрованный результат означает «нет в продаже
+    на этот фильтр», а не «поезд не ходит». Разница между этими двумя фразами — разница между
+    корректным ответом и потерянной поездкой; в наборе сценариев она проверяется явно.
+  </div>
+</section>
+
+<section id="viewer">
+  <h2><span class="num">05</span>Трейс-вьювер</h2>
+  <p>
+    <a href="trace-viewer.html"><b>trace-viewer.html</b></a> — один самодостаточный файл: открывается
+    двойным кликом, без сервера и без сети. Показывает запрос пользователя, ответ агента с
+    подсветкой каждого утверждения по статусу, проверки сценария и все вызовы инструментов с
+    аргументами и сырыми ответами.
+  </p>
+  <p>
+    <b>Кликните любое подсвеченное значение</b> — снизу выедет ящик с точным фрагментом ответа
+    сервера, откуда значение взято. Или с прямой констатацией, что его нет ни в одном из них.
+  </p>
+  <h4>Три вещи, в которых интерфейс аккуратен</h4>
+  <ul>
+    <li><b>Синтетические прогоны помечены.</b> Агент <code>demo:</code> или <code>scripted:</code>
+      получает янтарный бейдж <span class="chip assumed">НЕ ЗАМЕР</span> в шапке — рукописную
+      демонстрацию нельзя перепутать с измерением.</li>
+    <li><b>Пустая подсветка — не зачёт.</b> Если в ответе нет типизированных утверждений, панель
+      говорит об этом прямо, а не выглядит «чистой».</li>
+    <li><b>Жёлтое — не зелёное.</b> Объявленное допущение раскрыто, но не доказано, и в процент
+      обоснованности не идёт.</li>
+  </ul>
+  <p>Собрать локально:</p>
+  <pre><code>make viewer-demo   <span class="cmt"># из рукописных демо-трейсов — без модели и без ключа</span>
+make viewer        <span class="cmt"># из последнего настоящего прогона эвалов</span></code></pre>
+</section>
+
+<section id="config">
+  <h2><span class="num">06</span>Настройка</h2>
+  <p>
+    Все настройки — переменные окружения. Файл <code>.env</code> в корне репозитория читается при
+    импорте и <b>никогда</b> не перекрывает то, что уже экспортировано в шелле. Шаблон —
+    <code>.env.example</code>.
+  </p>
+  <table>
+    <tr><th>Переменная</th><th>Для чего</th><th>По умолчанию</th></tr>
+    <tr><td><code>TUTU_PROXY_MODE</code></td><td><code>mock</code> (фикстуры, без сети) или <code>live</code></td><td><code>mock</code></td></tr>
+    <tr><td><code>TUTU_UPSTREAM_URL</code></td><td>Адрес upstream MCP-сервера</td><td><code>https://mcp.tutu.ru/mcp</code></td></tr>
+    <tr><td><code>TUTU_FIXTURES_DIR</code></td><td>Где лежат записанные фикстуры</td><td><code>./fixtures</code></td></tr>
+    <tr><td><code>TUTU_PROXY_HOST</code> / <code>TUTU_PROXY_PORT</code></td><td>Адрес прослушивания</td><td><code>127.0.0.1</code> / <code>8800</code></td></tr>
+    <tr><td><code>OPENAI_API_KEY</code></td><td><b>Только эвалы</b> — агент под тестом и точный подсчёт токенов</td><td>—</td></tr>
+    <tr><td><code>OPENAI_MODEL</code></td><td>Модель по умолчанию для эвалов</td><td><code>gpt-5</code></td></tr>
+  </table>
+  <h4>Команды</h4>
+  <pre><code>make run-mock      <span class="cmt"># прокси на фикстурах</span>
+make run-live      <span class="cmt"># прокси на настоящий mcp.tutu.ru</span>
+make test          <span class="cmt"># весь pytest, целиком на фикстурах, без сети</span>
+make evals         <span class="cmt"># baseline против proxy (нужен OPENAI_API_KEY)</span>
+make evals-dry     <span class="cmt"># та же обвязка, скриптованный агент, без ключей</span>
+make fixtures      <span class="cmt"># перезаписать фикстуры с живого сервера</span>
+make viewer-demo   <span class="cmt"># trace-viewer.html из демо-трейсов</span></code></pre>
+</section>
+
+<section id="faq">
+  <h2><span class="num">07</span>Вопросы и ошибки</h2>
+
+  <details class="faq" open>
+    <summary>FixtureNotFoundError — что это и что делать</summary>
+    <div class="body">
+      <p>
+        Mock-режим ищет фикстуру по имени инструмента <b>и</b> точным (нормализованным) аргументам.
+        Вызов с незаписанными аргументами даёт явную ошибку с перечнем доступных сценариев — а не
+        тихий неправильный ответ. Это осознанный выбор: молчаливая подмена ответа в системе,
+        которая борется с выдуманными данными, была бы самопротиворечием.
+      </p>
+      <p>Заполнить пробел: <code>make evals-record</code> (один живой проход, дописывает недостающее) или <code>make fixtures</code>.</p>
+      <p><b>Промахи фикстур считаются отдельно от ошибок инструментов</b> — дыра в нашей записи не должна читаться как сбой Туту.</p>
+    </div>
+  </details>
+
+  <details class="faq">
+    <summary>Вызов вернул clarification_required вместо данных</summary>
+    <div class="body">
+      <p>Это не сбой, а premise gate. Значение, сужающее поиск, не имеет источника. Три выхода описаны в разделе <a href="#assess">assess_request</a>: спросить пользователя, объявить <code>_sources</code> или объявить <code>_assume</code>.</p>
+    </div>
+  </details>
+
+  <details class="faq">
+    <summary>Агент стал слишком часто переспрашивать</summary>
+    <div class="body">
+      <p>
+        Вызывайте <code>assess_request</code> первым и передавайте запрос <b>дословно</b>: значения,
+        которые пользователь реально написал, проходят гейт без лишнего круга. Отдельная метрика в
+        эвалах считает уточняющие вопросы на сценариях, где уточнять было нечего, — это защита от
+        превращения ассистента в анкету.
+      </p>
+    </div>
+  </details>
+
+  <details class="faq">
+    <summary>Нужен ли ключ OpenAI, чтобы просто попробовать прокси</summary>
+    <div class="body"><p>Нет. Сервер, тесты и трейс-вьювер работают без каких-либо ключей. Ключ нужен только эвал-харнессу, потому что это единственная часть, которая запускает модель.</p></div>
+  </details>
+
+  <details class="faq">
+    <summary>Числа токенов помечены знаком «~»</summary>
+    <div class="body">
+      <p>
+        Значит, они оценены офлайн через tiktoken, а не получены от провайдера. Точная цифра берётся
+        из одного реального пробного запроса на вариант с чтением <code>usage.prompt_tokens</code> —
+        только так учитывается собственная сериализация инструментов провайдером. Оценка печатается
+        с «~», чтобы не выглядеть точным числом, которое нечем подтвердить.
+      </p>
+    </div>
+  </details>
+</section>
+
+<section id="limits">
+  <h2><span class="num">08</span>Границы честности</h2>
+  <p>Что здесь <b>не</b> сделано — чтобы это не пришлось выяснять на демо:</p>
+  <ul>
+    <li><b>Ручные компактные описания есть у 3 из 16 инструментов</b> — <code>search_rail</code>,
+      <code>get_rail_seatmap</code>, <code>search_hotels</code>: самые крупные и те, что названы в
+      исходной статье. Механизм общий, покрытие — нет.</li>
+    <li><b><code>create_checkout_link</code> намеренно не тронут.</b> Это диспетчер покупки, и у
+      него нет парного instructions-инструмента, куда переложить прозу.</li>
+    <li><b>Плата за сжатие названа.</b> <code>get_rail_instructions</code> растёт с 26 КБ до 49 КБ —
+      её платит только та сессия, которая его вызвала, вместо всех сессий до первого поиска.</li>
+    <li><b>Нет фикстуры на 429.</b> Спровоцировать её означало бы сжечь общий рейт-лимит хакатона
+      всем остальным командам.</li>
+    <li><b>Отложенная выдача инструментов (<code>find_tools</code>) измерена, но не включена</b> —
+      она дала бы 89&nbsp;% экономии, но клиент, игнорирующий
+      <code>notifications/tools/list_changed</code>, вообще не увидел бы инструменты поиска. Это
+      первое место, где прокси реально сломал бы совместимость.</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<footer>
+  Tutu MCP Proxy · хакатон Туту, трек 2 «оптимизация инструментов» ·
+  <a href="https://github.com/Trum-ok/tutu-mcp-hackathon">github.com/Trum-ok/tutu-mcp-hackathon</a>
+</footer>
+
+</body>
+</html>

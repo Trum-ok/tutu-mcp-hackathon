@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Трейс-вьювер · Tutu MCP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Forensic dossier: near-monochrome ink, so the three semantic colors ──
+   ── carry every bit of meaning on the page and nothing competes with them ── */
+:root{
+  --ink:#0d0f12; --ink-2:#14171c; --ink-3:#1c2027; --line:#282e37; --line-soft:#1f242b;
+  --paper:#e8e4dc; --paper-dim:#9aa1ab; --paper-faint:#5f6873;
+  --confirmed:#4ade80; --confirmed-bg:rgba(74,222,128,.13);
+  --assumed:#fbbf24;  --assumed-bg:rgba(251,191,36,.14);
+  --unavailable:#fb5f4f; --unavailable-bg:rgba(251,95,79,.16);
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--ink); color:var(--paper); font-family:var(--mono);
+  font-size:13px; line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+/* film grain: keeps large dark fields from looking like flat dead pixels */
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:99; opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+a{color:inherit}
+
+/* ── header ────────────────────────────────────────────────────────────── */
+header{
+  border-bottom:1px solid var(--line); padding:18px 26px 0;
+  background:linear-gradient(180deg,var(--ink-2),var(--ink));
+}
+.brand{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.brand h1{
+  font-family:var(--serif); font-weight:400; font-size:31px; letter-spacing:.01em;
+  margin:0; line-height:1;
+}
+.brand .sub{font-size:11px; color:var(--paper-faint); letter-spacing:.14em; text-transform:uppercase}
+.agent-tag{
+  margin-left:auto; font-size:11px; letter-spacing:.08em; padding:5px 11px;
+  border:1px solid var(--line); border-radius:2px; color:var(--paper-dim);
+}
+.agent-tag b{color:var(--paper); font-weight:600}
+.agent-tag.synthetic{border-color:#5a4a1c; background:rgba(251,191,36,.07); color:var(--assumed)}
+
+.verdict{display:flex; gap:34px; flex-wrap:wrap; padding:20px 0 18px}
+.metric .k{font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint)}
+.metric .v{font-family:var(--serif); font-size:35px; line-height:1.05; margin-top:3px}
+.metric .d{font-size:11px; margin-top:2px; color:var(--paper-dim)}
+.metric .d.good{color:var(--confirmed)} .metric .d.bad{color:var(--unavailable)}
+.metric .v small{font-size:15px; color:var(--paper-faint); font-family:var(--mono)}
+
+.tabs{display:flex; gap:0; margin-top:2px}
+.tab{
+  font:inherit; font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+  background:none; border:1px solid var(--line); border-bottom:none; color:var(--paper-faint);
+  padding:9px 20px; cursor:pointer; margin-right:-1px; transition:color .15s,background .15s;
+}
+.tab:hover{color:var(--paper)}
+.tab[aria-selected="true"]{background:var(--ink-3); color:var(--paper); box-shadow:inset 0 2px 0 var(--paper)}
+
+/* ── layout ────────────────────────────────────────────────────────────── */
+main{display:grid; grid-template-columns:minmax(230px,290px) 1fr; min-height:calc(100% - 210px)}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+
+nav{border-right:1px solid var(--line); padding:16px 0}
+.nav-h{font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint); padding:0 20px 10px}
+.scn{
+  display:block; width:100%; text-align:left; background:none; border:none; color:var(--paper-dim);
+  font:inherit; padding:11px 20px; cursor:pointer; border-left:2px solid transparent;
+  transition:background .15s,color .15s;
+}
+.scn:hover{background:var(--ink-2); color:var(--paper)}
+.scn[aria-current="true"]{background:var(--ink-3); color:var(--paper); border-left-color:var(--paper)}
+.scn .row{display:flex; align-items:center; gap:8px}
+.scn .id{font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.scn .st{margin-left:auto; font-size:10px; letter-spacing:.06em; flex:none}
+.st.ok{color:var(--confirmed)} .st.fail{color:var(--unavailable)}
+/* barcode: every claim as one tick — groundedness readable at a glance */
+.bars{display:flex; gap:2px; margin-top:7px; height:4px}
+.bars i{flex:1; min-width:3px; border-radius:1px; background:var(--line)}
+.bars i.confirmed{background:var(--confirmed)}
+.bars i.assumed{background:var(--assumed)}
+.bars i.unavailable{background:var(--unavailable)}
+
+section.pane{padding:24px 30px 60px; min-width:0}
+.q{
+  border-left:2px solid var(--line); padding:2px 0 2px 15px; margin-bottom:5px;
+  color:var(--paper-dim); font-size:13px;
+}
+.q .lbl{font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--paper-faint); display:block; margin-bottom:4px}
+.probe{font-size:11px; color:var(--paper-faint); font-style:italic; margin:12px 0 20px; padding-left:17px}
+
+.answer-wrap{background:var(--ink-2); border:1px solid var(--line); border-radius:3px; overflow:hidden}
+.answer-head{
+  display:flex; align-items:center; gap:12px; padding:10px 18px;
+  border-bottom:1px solid var(--line-soft); font-size:10px; letter-spacing:.15em;
+  text-transform:uppercase; color:var(--paper-faint);
+}
+.answer-head .rate{margin-left:auto; letter-spacing:.04em; font-size:12px; text-transform:none}
+.answer{font-family:var(--sans); font-size:15.5px; line-height:1.75; padding:20px 22px; white-space:pre-wrap}
+.answer .empty{color:var(--paper-faint); font-style:italic; font-family:var(--mono); font-size:13px}
+
+/* the moment the whole page exists for */
+.claim{
+  font-family:var(--mono); font-size:.92em; padding:1px 4px; border-radius:2px;
+  border-bottom:2px solid; cursor:pointer; transition:filter .12s;
+}
+.claim:hover{filter:brightness(1.35)}
+.claim.confirmed{background:var(--confirmed-bg); border-color:var(--confirmed); color:#a7f3c9}
+.claim.assumed{background:var(--assumed-bg); border-color:var(--assumed); color:#fcd77a}
+.claim.unavailable{background:var(--unavailable-bg); border-color:var(--unavailable); color:#ffab9f}
+.claim.sel{outline:1px solid var(--paper); outline-offset:2px}
+
+.legend{display:flex; gap:18px; flex-wrap:wrap; padding:11px 22px; border-top:1px solid var(--line-soft); font-size:11px; color:var(--paper-dim)}
+.legend span{display:flex; align-items:center; gap:7px}
+.legend i{width:9px; height:9px; border-radius:1px; display:inline-block}
+
+.h2{font-family:var(--serif); font-size:21px; margin:34px 0 12px; font-weight:400}
+.checks{display:flex; flex-direction:column; gap:1px; background:var(--line-soft); border:1px solid var(--line); border-radius:3px; overflow:hidden}
+.check{display:flex; gap:12px; padding:9px 15px; background:var(--ink-2); font-size:12px; align-items:baseline}
+.check .m{flex:none; width:14px}
+.check.pass .m{color:var(--confirmed)} .check.fail .m{color:var(--unavailable)}
+.check .n{color:var(--paper); min-width:190px}
+.check .dt{color:var(--paper-faint)}
+
+details.call{border:1px solid var(--line); border-radius:3px; margin-bottom:8px; background:var(--ink-2)}
+details.call>summary{padding:10px 15px; cursor:pointer; font-size:12px; display:flex; gap:11px; align-items:center; list-style:none}
+details.call>summary::-webkit-details-marker{display:none}
+details.call>summary::before{content:"▸"; color:var(--paper-faint); transition:transform .15s}
+details.call[open]>summary::before{transform:rotate(90deg)}
+.call .nm{color:var(--paper); font-weight:500}
+.call .meta{margin-left:auto; color:var(--paper-faint); font-size:11px}
+.call .body{border-top:1px solid var(--line-soft); padding:13px 15px}
+.lbl-sm{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--paper-faint); margin-bottom:6px}
+pre{
+  margin:0 0 13px; background:var(--ink); border:1px solid var(--line-soft); border-radius:2px;
+  padding:11px 13px; overflow-x:auto; font-size:11.5px; line-height:1.6; color:var(--paper-dim);
+  max-height:340px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;
+}
+mark{background:var(--confirmed-bg); color:#bcf5d5; border-bottom:1px solid var(--confirmed); padding:0 2px}
+
+/* ── evidence drawer ───────────────────────────────────────────────────── */
+.drawer{
+  position:fixed; left:0; right:0; bottom:0; z-index:50; background:var(--ink-3);
+  border-top:1px solid var(--line); box-shadow:0 -22px 55px rgba(0,0,0,.6);
+  transform:translateY(101%); transition:transform .26s cubic-bezier(.22,1,.36,1);
+  max-height:56vh; display:flex; flex-direction:column;
+}
+.drawer.open{transform:translateY(0)}
+.drawer-head{display:flex; align-items:center; gap:13px; padding:12px 24px; border-bottom:1px solid var(--line)}
+.drawer-head .t{font-family:var(--serif); font-size:19px}
+.pill{font-size:10px; letter-spacing:.11em; text-transform:uppercase; padding:3px 9px; border-radius:2px; border:1px solid}
+.pill.confirmed{color:var(--confirmed); border-color:var(--confirmed); background:var(--confirmed-bg)}
+.pill.assumed{color:var(--assumed); border-color:var(--assumed); background:var(--assumed-bg)}
+.pill.unavailable{color:var(--unavailable); border-color:var(--unavailable); background:var(--unavailable-bg)}
+.x{margin-left:auto; background:none; border:1px solid var(--line); color:var(--paper-dim); font:inherit; cursor:pointer; padding:4px 11px; border-radius:2px}
+.x:hover{color:var(--paper)}
+.drawer-body{padding:16px 24px 24px; overflow-y:auto}
+.verdict-line{font-family:var(--sans); font-size:14px; margin-bottom:14px; color:var(--paper-dim)}
+.verdict-line b{color:var(--paper)}
+
+.fade{animation:fade .45s both}
+@keyframes fade{from{opacity:0; transform:translateY(7px)}to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Трейс-вьювер</h1>
+    <span class="sub">baseline · proxy · mcp.tutu.ru</span>
+    <span class="agent-tag" id="agent-tag"></span>
+  </div>
+  <div class="verdict" id="verdict"></div>
+  <div class="tabs" id="tabs" role="tablist"></div>
+</header>
+
+<main>
+  <nav><div class="nav-h">Сценарии</div><div id="scenarios"></div></nav>
+  <section class="pane" id="pane"></section>
+</main>
+
+<div class="drawer" id="drawer" aria-live="polite">
+  <div class="drawer-head">
+    <span class="t">Откуда это значение</span>
+    <span class="pill" id="d-pill"></span>
+    <button class="x" id="d-close">закрыть</button>
+  </div>
+  <div class="drawer-body" id="d-body"></div>
+</div>
+
+<script id="trace-data" type="application/json">__TRACE_DATA__</script>
+<script>
+const DATA = JSON.parse(document.getElementById('trace-data').textContent);
+const STATUS_RU = {confirmed:'подтверждено', assumed:'допущение', unavailable:'нет в данных'};
+let state = {variant: DATA.variants[0]?.variant, scenario: null};
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
+const variantOf = n => DATA.variants.find(v => v.variant === n);
+
+/* Which raw strings would prove this claim. Prices need normalising: the answer
+   writes "1 301,88 ₽" where the payload holds 1301.88. */
+function needles(claim){
+  if(claim.kind !== 'price') return [claim.text];
+  const digits = claim.text.replace(/[^\d.,\s]/g,'').replace(/\s/g,'').replace(',','.');
+  const n = parseFloat(digits);
+  if(Number.isNaN(n)) return [digits];
+  const out = [digits, String(n)];
+  if(Number.isInteger(n)) out.push(n.toFixed(1), n.toFixed(2));
+  return [...new Set(out)];
+}
+
+function findEvidence(claim, calls){
+  for(const call of calls){
+    for(const needle of needles(claim)){
+      const at = (call.result_text || '').indexOf(needle);
+      if(at !== -1) return {call, needle, at};
+    }
+  }
+  return null;
+}
+
+/* Non-overlapping highlight ranges. Longest match wins where two claims collide,
+   so a train number inside a longer token never steals its highlight. */
+function ranges(answer, claims){
+  const found = [];
+  claims.forEach((claim, i) => {
+    let from = 0;
+    for(;;){
+      const at = answer.indexOf(claim.text, from);
+      if(at === -1 || !claim.text) break;
+      found.push({start:at, end:at + claim.text.length, claim, i});
+      from = at + claim.text.length;
+    }
+  });
+  found.sort((a,b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+  const out = []; let last = -1;
+  for(const r of found){ if(r.start >= last){ out.push(r); last = r.end; } }
+  return out;
+}
+
+function renderAnswer(scn){
+  const answer = scn.answer || '';
+  if(!answer) return '<span class="empty">агент не дал текстового ответа</span>';
+  const rs = ranges(answer, scn.groundedness.claims);
+  let html = '', cursor = 0;
+  for(const r of rs){
+    html += esc(answer.slice(cursor, r.start));
+    html += `<span class="claim ${r.claim.status}" data-claim="${r.i}" tabindex="0"
+      title="${STATUS_RU[r.claim.status]}">${esc(answer.slice(r.start, r.end))}</span>`;
+    cursor = r.end;
+  }
+  return html + esc(answer.slice(cursor));
+}
+
+function renderVerdict(){
+  const v = variantOf(state.variant);
+  const base = DATA.variants[0], other = DATA.variants[1];
+  const m = v.metrics, s = v.surface;
+  const tok = s ? (s.exact ? s.tokens : '~' + s.tokens) : '—';
+
+  // Say what THIS tab's number means relative to baseline — the same sentence on
+  // both tabs reads as if baseline were saving something against itself.
+  let saving = `<div class="d">${s ? s.bytes_ + ' байт' : ''}</div>`;
+  if(base?.surface && s && base.surface.tokens){
+    if(v.variant === base.variant){
+      saving = `<div class="d">базовая линия · ${s.bytes_} байт</div>`;
+    } else {
+      const delta = Math.round((1 - s.tokens / base.surface.tokens) * 100);
+      saving = `<div class="d ${delta > 0 ? 'good' : 'bad'}">${delta > 0 ? '−' : '+'}${Math.abs(delta)}% к baseline</div>`;
+    }
+  }
+  const cards = [
+    {k:'Поверхность, токенов', v:tok, d:saving},
+    {k:'Groundedness', v:pct(m.groundedness_rate), d:`<div class="d">${m.grounded_claims}/${m.total_claims} утверждений</div>`},
+    {k:'Task success', v:`${m.successes}<small>/${m.scenarios}</small>`, d:`<div class="d">${m.tool_calls} вызовов инструментов</div>`},
+  ];
+  document.getElementById('verdict').innerHTML = cards
+    .map(c => `<div class="metric"><div class="k">${c.k}</div><div class="v">${c.v}</div>${c.d}</div>`).join('');
+}
+
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = DATA.variants.map(v =>
+    `<button class="tab" role="tab" data-variant="${esc(v.variant)}"
+      aria-selected="${v.variant === state.variant}">${esc(v.variant)}</button>`).join('');
+}
+
+function renderNav(){
+  const v = variantOf(state.variant);
+  document.getElementById('scenarios').innerHTML = v.scenarios.map(s => {
+    const bars = s.groundedness.claims.map(c => `<i class="${c.status}"></i>`).join('') || '<i></i>';
+    return `<button class="scn" data-scenario="${esc(s.id)}" aria-current="${s.id === state.scenario}">
+      <span class="row"><span class="id">${esc(s.id)}</span>
+      <span class="st ${s.success ? 'ok' : 'fail'}">${s.success ? 'ok' : 'fail'}</span></span>
+      <span class="bars">${bars}</span></button>`;
+  }).join('');
+}
+
+function renderPane(){
+  const v = variantOf(state.variant);
+  const scn = v.scenarios.find(s => s.id === state.scenario) || v.scenarios[0];
+  if(!scn){ document.getElementById('pane').innerHTML = '<p>нет данных</p>'; return; }
+  state.scenario = scn.id;
+
+  const g = scn.groundedness;
+  const bad = g.claims.filter(c => c.status === 'unavailable').length;
+  const rateLine = g.claims.length
+    ? `${pct(g.rate)} · ${bad ? bad + ' не подтверждено' : 'всё подтверждено'}`
+    : 'проверяемых утверждений нет';
+
+  const checks = scn.checks.map(c =>
+    `<div class="check ${c.passed ? 'pass' : 'fail'}"><span class="m">${c.passed ? '✓' : '✕'}</span>
+     <span class="n">${esc(c.name)}</span><span class="dt">${esc(c.detail || '')}</span></div>`).join('');
+
+  const calls = scn.tool_calls.map(c => `
+    <details class="call">
+      <summary><span class="nm">${esc(c.name)}</span>
+        <span class="meta">${c.fixture_miss ? 'нет фикстуры · ' : ''}${c.is_error ? 'ошибка · ' : ''}${(c.result_text || '').length} симв.</span>
+      </summary>
+      <div class="body">
+        <div class="lbl-sm">Аргументы</div>
+        <pre>${esc(JSON.stringify(c.arguments, null, 2))}</pre>
+        <div class="lbl-sm">Ответ сервера</div>
+        <pre>${esc(c.result_text || '')}</pre>
+      </div>
+    </details>`).join('') || '<p style="color:var(--paper-faint)">инструменты не вызывались</p>';
+
+  const failNote = scn.failure
+    ? `<div class="q" style="border-color:var(--unavailable); color:var(--unavailable)">
+        <span class="lbl">Прогон не завершился</span>${esc(scn.failure)}</div>` : '';
+
+  document.getElementById('pane').innerHTML = `
+    <div class="fade">
+      <div class="q"><span class="lbl">Запрос пользователя</span>${esc(scn.request)}</div>
+      <div class="probe">${esc(scn.probes || '')}</div>
+      ${failNote}
+      <div class="answer-wrap">
+        <div class="answer-head"><span>Ответ агента</span><span class="rate">${rateLine}</span></div>
+        <div class="answer" id="answer">${renderAnswer(scn)}</div>
+        ${g.claims.length ? `<div class="legend">
+          <span><i style="background:var(--confirmed)"></i>подтверждено в tool_result</span>
+          <span><i style="background:var(--assumed)"></i>объявленное допущение</span>
+          <span><i style="background:var(--unavailable)"></i>в данных нет</span>
+          <span style="color:var(--paper-faint)">— кликните значение, чтобы увидеть источник</span>
+        </div>` : `<div class="legend"><span style="color:var(--paper-faint)">
+          В ответе нет цен, времён, номеров и ссылок — подсвечивать нечего.
+          Такой ответ судят проверки сценария ниже: подсветка ловит типизированные
+          утверждения, но не каждую выдумку.</span></div>`}
+      </div>
+      <div class="h2">Проверки сценария</div>
+      <div class="checks">${checks}</div>
+      <div class="h2">Вызовы инструментов</div>
+      ${calls}
+    </div>`;
+}
+
+function openDrawer(claimIndex){
+  const v = variantOf(state.variant);
+  const scn = v.scenarios.find(s => s.id === state.scenario);
+  const claim = scn.groundedness.claims[claimIndex];
+  const ev = findEvidence(claim, scn.tool_calls);
+
+  document.querySelectorAll('.claim.sel').forEach(e => e.classList.remove('sel'));
+  document.querySelector(`.claim[data-claim="${claimIndex}"]`)?.classList.add('sel');
+
+  const pill = document.getElementById('d-pill');
+  pill.className = 'pill ' + claim.status;
+  pill.textContent = STATUS_RU[claim.status];
+
+  let body;
+  if(ev){
+    const pad = 260;
+    const from = Math.max(0, ev.at - pad);
+    const to = Math.min(ev.call.result_text.length, ev.at + ev.needle.length + pad);
+    const raw = ev.call.result_text;
+    body = `<div class="verdict-line">Значение <b>${esc(claim.text)}</b> найдено в ответе
+        <b>${esc(ev.call.name)}</b>, позиция ${ev.at}.</div>
+      <div class="lbl-sm">Фрагмент ответа сервера</div>
+      <pre>${from ? '…' : ''}${esc(raw.slice(from, ev.at))}<mark>${esc(ev.needle)}</mark>${esc(raw.slice(ev.at + ev.needle.length, to))}${to < raw.length ? '…' : ''}</pre>`;
+  } else if(claim.status === 'assumed'){
+    body = `<div class="verdict-line">Значение <b>${esc(claim.text)}</b> сервер не возвращал — это
+      допущение, которое агент объявил заранее.</div>
+      ${(scn.groundedness.assumptions || []).map(a => `<pre>${esc(a)}</pre>`).join('')}`;
+  } else {
+    body = `<div class="verdict-line">Значение <b>${esc(claim.text)}</b> не найдено ни в одном
+      ответе сервера за этот ход. Агент его придумал.</div>
+      <div class="lbl-sm">Проверено вызовов: ${scn.tool_calls.length}</div>`;
+  }
+  document.getElementById('d-body').innerHTML = body;
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.querySelectorAll('.claim.sel').forEach(e => e.classList.remove('sel'));
+}
+
+document.addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if(tab){ state.variant = tab.dataset.variant; closeDrawer(); render(); return; }
+  const scn = e.target.closest('.scn');
+  if(scn){ state.scenario = scn.dataset.scenario; closeDrawer(); render(); return; }
+  const claim = e.target.closest('.claim');
+  if(claim){ openDrawer(Number(claim.dataset.claim)); return; }
+  if(e.target.id === 'd-close') closeDrawer();
+});
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeDrawer();
+  if(e.key === 'Enter' && e.target.classList?.contains('claim')) openDrawer(Number(e.target.dataset.claim));
+});
+
+function render(){ renderTabs(); renderVerdict(); renderNav(); renderPane(); }
+
+const tag = document.getElementById('agent-tag');
+const synthetic = /^(demo|scripted)/.test(DATA.agent || '');
+tag.className = 'agent-tag' + (synthetic ? ' synthetic' : '');
+tag.innerHTML = (synthetic ? 'НЕ ЗАМЕР · агент: <b>' : 'агент: <b>') + esc(DATA.agent || '—') + '</b>';
+
+render();
+</script>
+</body>
+</html>

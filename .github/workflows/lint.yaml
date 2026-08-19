@@ -1,0 +1,31 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+env:
+  LINT_PATHS: tutu_mcp evals scripts tests
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync deps
+        run: uv sync --frozen
+
+      - name: ruff (lint)
+        run: uv run ruff check $LINT_PATHS
+
+      - name: ruff (format)
+        run: uv run ruff format --check $LINT_PATHS
+
+      - name: ty
+        run: uv run ty check tutu_mcp evals

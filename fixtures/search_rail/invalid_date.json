@@ -1,0 +1,13 @@
+{
+  "tool": "search_rail",
+  "scenario": "invalid_date",
+  "arguments": {
+    "origin": "Санкт-Петербург",
+    "destination": "Москва",
+    "departure_date": "not-a-date"
+  },
+  "result": {
+    "text": "Error executing tool search_rail: 1 validation error for search_railArguments\ndeparture_date\n  Input should be a valid date or datetime, invalid character in year [type=date_from_datetime_parsing, input_value='not-a-date', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/date_from_datetime_parsing",
+    "is_error": true
+  }
+}

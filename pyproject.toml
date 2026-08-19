@@ -3,16 +3,27 @@ name = "tutu-mcp"
 version = "0.1.0"
 description = "..."
 requires-python = ">=3.13"
-authors = [{name = "Артамонов Аркадий", email = "artamarkan@gmail.com"}]
+authors = [{ name = "Артамонов Аркадий", email = "artamarkan@gmail.com" }]
 readme = "README.md"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=2.0.0",
+    # already a transitive dep of `mcp`; declared because our own tool schemas
+    # are generated from Pydantic models (see tutu_mcp/toolspec.py)
+    "pydantic>=2.13",
+    "python-dotenv>=1.2.3",
+]
 
 [project.urls]
 Homepage = "https://hackathon2026.tutu.ru"
 
 [dependency-groups]
 dev = [
+    "openai>=3.3.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.3",
+    "tiktoken>=0.14.0",
     "ty>=0.0.73",
 ]
 
@@ -36,9 +47,15 @@ select = [
 ignore = [
     "E501",
     "B008",
+    "RUF001",
+    "RUF002",
+    "RUF003",
 ]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

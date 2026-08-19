@@ -1,0 +1,17 @@
+# Render Blueprint: point Render at this repo and it builds the Dockerfile and
+# publishes https://<name>.onrender.com/mcp — the URL the docs hand out.
+#
+# Mock mode is the deployed default (see the Dockerfile for why). Flip
+# TUTU_PROXY_MODE to `live` in the Render dashboard to proxy the real server.
+# No healthCheckPath: a plain GET on /mcp is not a health endpoint — Streamable
+# HTTP answers it with 4xx, which Render would read as a dead service.
+services:
+  - type: web
+    name: tutu-mcp-proxy
+    runtime: docker
+    plan: free
+    envVars:
+      - key: TUTU_PROXY_MODE
+        value: mock
+      - key: TUTU_PROXY_HOST
+        value: 0.0.0.0

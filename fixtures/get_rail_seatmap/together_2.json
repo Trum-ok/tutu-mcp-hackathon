@@ -1,0 +1,40 @@
+{
+  "tool": "get_rail_seatmap",
+  "scenario": "together_2",
+  "arguments": {
+    "details_ref": {
+      "transport": "railway",
+      "source": "seats-gateway.seats-by-params",
+      "departure_station_code": "2004001",
+      "arrival_station_code": "2006004",
+      "train_number": "025А",
+      "departure_at": "2026-08-25T23:05:00+03:00",
+      "price": {
+        "amount": 1301.88,
+        "currency": "RUB"
+      },
+      "title": "Поезд 025А",
+      "carriers": [
+        "ФПК"
+      ],
+      "duration_min": 431,
+      "arrival_at": "2026-08-26T06:16:00+03:00",
+      "review_summary": {
+        "rating": 9.2,
+        "review_count": 1748,
+        "label": "⭐ 9.2/10 · 1 748 отзывов",
+        "source": "offers-api.feedback",
+        "scope": "train",
+        "subject": "025А",
+        "scale": 10,
+        "feedback_key": "025А"
+      }
+    },
+    "task": "together",
+    "seats_together": 2
+  },
+  "result": {
+    "text": "{\"transport\":\"railway\",\"source\":{\"endpoint\":\"GET /api/seats-by-params\",\"read_only\":true,\"note\":\"Seat layout is read-only. `cars[].canvas.svg_url` points at the CDN-hosted vagon outline; the file is a graphical contour with no `<text>` seat numbers, so it is useful as an illustration but NOT as a vision-readable seat map — use `seats[].position` for any spatial reasoning.\"},\"train_meta\":{\"number\":\"025А\",\"name\":\"Смена – А. Бетанкур (двухэтажный)\",\"train_class\":\"two_storey\",\"is_premium\":true,\"is_firm\":true,\"is_double_decker\":true},\"passenger_requirements\":[{\"passenger_type\":\"ADULT\",\"max_age\":200,\"needs_ticket\":true,\"chargeable\":true},{\"passenger_type\":\"CHILD\",\"max_age\":10,\"needs_ticket\":true,\"chargeable\":true},{\"passenger_type\":\"BABY\",\"max_age\":5,\"needs_ticket\":true,\"chargeable\":false}],\"pricing_note\":\"Prices in `fares[]` are pre-cart totals (fare + its service fee) and run BELOW the final cart price: the checkout applies Tutu's own, larger service fee (observed +6–8%). The `search_rail` listing prices DO match the cart. Use this map to compare seats and fare types (refundable vs non-refundable deltas are correct); quote the bookable total from the search listing, or say the exact final price appears in the cart.\",\"seatmap_status\":\"ok\",\"task\":\"together\",\"seats_together\":2,\"seats_considered\":305,\"groups_by_car_type\":{\"COMPARTMENT\":[{\"car_number\":\"13\",\"car_type\":\"COMPARTMENT\",\"compartment_number\":17,\"seat_numbers\":[\"110\",\"112\"],\"seats\":[{\"number\":\"110\",\"type\":\"UPPER\",\"group_index\":0},{\"number\":\"112\",\"type\":\"UPPER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":9375.6,\"currency\":\"RUB\"},\"total_fare_type\":\"NON_REFUNDABLE\",\"service_class\":\"2Ф\",\"deck\":\"UPPER_DECK\",\"gender\":\"NO_GENDER\"},{\"car_number\":\"12\",\"car_type\":\"COMPARTMENT\",\"compartment_number\":17,\"seat_numbers\":[\"110\",\"111\"],\"seats\":[{\"number\":\"110\",\"type\":\"UPPER\",\"group_index\":0},{\"number\":\"111\",\"type\":\"LOWER\",\"group_index\":1}],\"spread_px\":50.9,\"total_price\":{\"amount\":9970.4,\"currency\":\"RUB\"},\"total_fare_type\":\"NON_REFUNDABLE\",\"service_class\":\"2Х\",\"deck\":\"UPPER_DECK\",\"gender\":\"NO_GENDER\",\"fare_note\":\"Seats in this group belong to different `seat_groups[]` entries (see each seat's `group_index`), so their fares differ — `total_price` is their sum for `total_fare_type`, and `service_classes` (when present) names every class involved.\"},{\"car_number\":\"11\",\"car_type\":\"COMPARTMENT\",\"compartment_number\":17,\"seat_numbers\":[\"109\",\"111\"],\"seats\":[{\"number\":\"109\",\"type\":\"LOWER\",\"group_index\":0},{\"number\":\"111\",\"type\":\"LOWER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":10565.2,\"currency\":\"RUB\"},\"total_fare_type\":\"NON_REFUNDABLE\",\"service_class\":\"2Ф\",\"deck\":\"UPPER_DECK\",\"gender\":\"NO_GENDER\"},{\"car_number\":\"10\",\"car_type\":\"COMPARTMENT\",\"compartment_number\":15,\"seat_numbers\":[\"102\",\"104\"],\"seats\":[{\"number\":\"102\",\"type\":\"UPPER\",\"group_index\":0},{\"number\":\"104\",\"type\":\"UPPER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":11298.2,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"2Х\",\"deck\":\"UPPER_DECK\",\"gender\":\"NO_GENDER\"}],\"LUX\":[{\"car_number\":\"9\",\"car_type\":\"LUX\",\"compartment_number\":1,\"seat_numbers\":[\"1\",\"2\"],\"seats\":[{\"number\":\"1\",\"type\":\"LOWER\",\"group_index\":0},{\"number\":\"2\",\"type\":\"LOWER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":28142.4,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"1Э\",\"deck\":\"LOWER_DECK\",\"gender\":\"MIXED\"},{\"car_number\":\"9\",\"car_type\":\"LUX\",\"compartment_number\":7,\"seat_numbers\":[\"13\",\"14\"],\"seats\":[{\"number\":\"13\",\"type\":\"LOWER\",\"group_index\":0},{\"number\":\"14\",\"type\":\"LOWER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":28142.4,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"1Э\",\"deck\":\"LOWER_DECK\",\"gender\":\"UNDEFINED\"},{\"car_number\":\"9\",\"car_type\":\"LUX\",\"compartment_number\":2,\"seat_numbers\":[\"3\",\"4\"],\"seats\":[{\"number\":\"3\",\"type\":\"LOWER\",\"group_index\":0},{\"number\":\"4\",\"type\":\"LOWER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":28142.4,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"1Э\",\"deck\":\"LOWER_DECK\",\"gender\":\"MIXED\"},{\"car_number\":\"9\",\"car_type\":\"LUX\",\"compartment_number\":9,\"seat_numbers\":[\"81\",\"82\"],\"seats\":[{\"number\":\"81\",\"type\":\"LOWER\",\"group_index\":0},{\"number\":\"82\",\"type\":\"LOWER\",\"group_index\":0}],\"spread_px\":36.0,\"total_price\":{\"amount\":28142.4,\"currency\":\"RUB\"},\"total_fare_type\":\"REFUNDABLE\",\"service_class\":\"1Э\",\"deck\":\"UPPER_DECK\",\"gender\":\"MIXED\"}]},\"groups_found_by_car_type\":{\"COMPARTMENT\":78,\"LUX\":11},\"largest_group_available\":4,\"note\":\"Sets of 2 free seats that share ONE section of one car, cheapest-first within each car category. `total_price` is the cheapest adult total the party can actually be sold at, priced in the one `total_fare_type` all its seats share — checkout takes a single fare type for the whole selection, so quote that type with the price (same pre-cart caveat as every seatmap price, see `pricing_note`). A section is upstream's own `compartment_number`, split by deck and, in плацкарт, by compartment-vs-side berths — so a group is never spread across floors or across the passage. `spread_px` is the widest distance between two seats of the group (smaller = tighter). COMPARTMENT (купе): a group is ONE compartment — up to 4 berths behind one door. LUX (СВ): a group is ONE two-berth compartment.\"}",
+    "is_error": false
+  }
+}

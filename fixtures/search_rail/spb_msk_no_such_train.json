@@ -1,0 +1,16 @@
+{
+  "tool": "search_rail",
+  "scenario": "spb_msk_no_such_train",
+  "arguments": {
+    "origin": "Санкт-Петербург",
+    "destination": "Москва",
+    "departure_date": "2026-08-25",
+    "train_numbers": [
+      "999999"
+    ]
+  },
+  "result": {
+    "text": "{\"offers\":[],\"meta\":{\"transport\":\"railway\",\"from\":{\"name\":\"Санкт-Петербург\",\"geo_id\":\"2656915\",\"region\":\"Санкт-Петербург\"},\"to\":{\"name\":\"Москва\",\"geo_id\":\"2657260\",\"region\":\"Москва\"},\"sort\":\"price_asc\",\"page\":1,\"page_size\":10,\"total_returned\":0,\"total_matched\":0,\"total_matched_exact\":true,\"has_more\":false,\"post_filter_dropped_over_cap\":0,\"post_filter_dropped_not_direct\":0,\"post_filter_dropped_wrong_carrier\":0,\"post_filter_dropped_wrong_train_number\":48,\"post_filter_dropped_wrong_seat_category\":0,\"post_filter_unverified_seat_category\":0,\"carriers_available\":[{\"name\":\"ФПК\",\"offers_count\":28,\"price_from\":1301.88},{\"name\":\"ДОСС\",\"offers_count\":16,\"price_from\":2275.07},{\"name\":\"ГРАНД\",\"offers_count\":2,\"price_from\":3231.58},{\"name\":\"ТВЕРСК\",\"offers_count\":2,\"price_from\":5605.38}]}}",
+    "is_error": false
+  }
+}
