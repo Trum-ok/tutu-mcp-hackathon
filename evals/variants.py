@@ -19,6 +19,7 @@ from typing import Any
 # module to get two strings would drag the whole proxy into `tutu.py --help`.
 from evals.options import BASELINE as BASELINE
 from evals.options import PROXY as PROXY
+from evals.options import VARIANT_NAMES, check_variants
 from tutu_mcp.backend import ToolBackend
 from tutu_mcp.premises import SessionPremises
 from tutu_mcp.proxy.compact_tools import apply_compact_overrides
@@ -103,8 +104,6 @@ async def build_variants(
         ),
     }
 
-    wanted = names or [BASELINE, PROXY]
-    unknown = set(wanted) - set(all_variants)
-    if unknown:
-        raise KeyError(f"unknown variants: {sorted(unknown)}")
+    wanted = names or list(VARIANT_NAMES)
+    check_variants(wanted)
     return [all_variants[n] for n in wanted]

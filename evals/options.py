@@ -22,6 +22,28 @@ from pathlib import Path
 # them for its default and that module pulls in the whole proxy.
 BASELINE = "baseline"
 PROXY = "proxy"
+VARIANT_NAMES = (BASELINE, PROXY)
+
+
+class SelectionError(ValueError):
+    """A `--scenarios` / `--domains` / `--variants` value the harness cannot honor.
+
+    Raised instead of the `KeyError` these lookups used to leak, which reached
+    the user as a rich traceback — the least useful answer to a typo in a flag.
+    `evals.run` turns it into a message and exit code 2, the way `--effort` and
+    `--record-missing` already fail.
+    """
+
+
+def check_variants(names: list[str] | tuple[str, ...]) -> None:
+    """Validated here, from a leaf module, so `evals.run` can reject a typo
+    BEFORE it opens the live upstream connection — an unknown variant name
+    should not cost a request against the shared rate limit."""
+    unknown = sorted(set(names) - set(VARIANT_NAMES))
+    if unknown:
+        raise SelectionError(
+            f"Неизвестные варианты: {', '.join(unknown)}. Доступны: {', '.join(VARIANT_NAMES)}."
+        )
 
 
 class AgentKind(StrEnum):

@@ -11,6 +11,8 @@ toward breadth of happy paths.
 
 from dataclasses import dataclass, field
 
+from evals.options import SelectionError
+
 from .checks import (
     ABSENCE_CLAIM_PHRASES,
     FIELD_MISSING_PHRASES,
@@ -319,15 +321,36 @@ SCENARIOS: list[Scenario] = [
 
 
 SCENARIOS_BY_ID = {s.id: s for s in SCENARIOS}
+DOMAINS = sorted({s.domain for s in SCENARIOS})
 
 
 def select(ids: list[str] | None = None, domains: list[str] | None = None) -> list[Scenario]:
+    """The scenarios a run should cover, or `SelectionError` explaining why none.
+
+    An unknown `--domains` value used to filter everything out silently: the run
+    finished with exit 0 and a report over zero scenarios, which reads exactly
+    like a passing run. Every way of ending up with an empty set is an error
+    here, including a valid-but-disjoint combination of the two filters.
+    """
     chosen = SCENARIOS
     if ids:
-        missing = set(ids) - set(SCENARIOS_BY_ID)
-        if missing:
-            raise KeyError(f"unknown scenario ids: {sorted(missing)}")
+        unknown = sorted(set(ids) - set(SCENARIOS_BY_ID))
+        if unknown:
+            raise SelectionError(
+                f"Неизвестные сценарии: {', '.join(unknown)}. "
+                f"Доступны: {', '.join(sorted(SCENARIOS_BY_ID))}."
+            )
         chosen = [s for s in chosen if s.id in set(ids)]
     if domains:
+        unknown = sorted(set(domains) - set(DOMAINS))
+        if unknown:
+            raise SelectionError(
+                f"Неизвестные домены: {', '.join(unknown)}. Доступны: {', '.join(DOMAINS)}."
+            )
         chosen = [s for s in chosen if s.domain in set(domains)]
+    if not chosen:
+        raise SelectionError(
+            "Под заданные --scenarios и --domains не подошёл ни один сценарий: "
+            "прогон был бы пустым, а отчёт — неотличим от успешного."
+        )
     return chosen

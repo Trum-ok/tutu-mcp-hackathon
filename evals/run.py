@@ -25,7 +25,7 @@ from evals.config import (
     openai_effort_default,
     openai_model_default,
 )
-from evals.options import AgentKind, Api, Effort, EvalOptions
+from evals.options import AgentKind, Api, Effort, EvalOptions, SelectionError, check_variants
 from evals.runner import ScenarioResult, run_eval
 from evals.scenarios import select
 from evals.tokens import (
@@ -88,10 +88,18 @@ async def run_evals(opts: EvalOptions) -> int:
     store = FixtureStore(settings.fixtures_dir)
     credentials = openai_credentials_source()
 
-    scenarios = select(
-        ids=list(opts.scenarios) if opts.scenarios else None,
-        domains=list(opts.domains) if opts.domains else None,
-    )
+    # Both checks run before anything is built or connected: a typo in a flag
+    # must not cost an upstream request, and an empty selection must not produce
+    # a report that looks like a clean run.
+    try:
+        check_variants(opts.variants)
+        scenarios = select(
+            ids=list(opts.scenarios) if opts.scenarios else None,
+            domains=list(opts.domains) if opts.domains else None,
+        )
+    except SelectionError as exc:
+        print(exc, file=sys.stderr)
+        return 2
 
     if opts.record_missing and not opts.live:
         print("--record-missing требует --live", file=sys.stderr)
