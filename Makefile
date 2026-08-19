@@ -35,7 +35,9 @@ run-live:
 evals:
 	uv run python tutu.py evals
 
-# no model, no credentials: proves the harness itself is wired end to end
+# no model, no credentials: replays the hand-written plans from evals/plans.py over
+# the real fixtures and asserts the verdict each one must get — half of them are
+# written to fail, so a flipped verdict in EITHER direction exits non-zero
 evals-dry:
 	uv run python tutu.py evals --agent scripted
 
