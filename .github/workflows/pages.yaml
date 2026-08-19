@@ -28,6 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `enablement` включает Pages через API, если он ещё не включён в
+      # настройках репозитория, — иначе первый прогон падает на 404 «Get Pages
+      # site failed». Шаг стоит до сборки: незачем собирать сайт, которому
+      # некуда деплоиться.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -50,7 +58,6 @@ jobs:
             --data out/eval-results.demo.json \
             --out site/trace-viewer.html
 
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
