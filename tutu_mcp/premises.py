@@ -372,6 +372,20 @@ MAX_SEEN_VALUES = 50_000  # one search_rail result is ~26 KB; the cap keeps a lo
 # that: past it the session stops gating entirely and books assumptions instead.
 MAX_GATES_PER_SESSION = 12
 
+# Ceiling on the evidence one session keeps for `check_groundedness`. A single
+# `search_rail` result is ~26 KB, so both limits matter: the count keeps a chatty
+# session bounded, the byte budget keeps one enormous result from being it.
+MAX_RESULT_PAYLOADS = 8
+MAX_RESULT_BYTES = 256_000
+
+
+# How an unsettled slot is meant to be closed. Distinguishing these is what keeps
+# the gate from turning into an interrogation: only a BLOCKING gap genuinely needs
+# the user, because its absence distorts the answer. A narrowing filter the agent
+# invented is closed by dropping it — the user never asked for it, so searching
+# without it is not a guess, it is the request as stated.
+Resolution = Literal["ask_user", "call_tool", "drop_filter"]
+
 
 @dataclass(frozen=True)
 class Slot:
@@ -381,6 +395,23 @@ class Slot:
     ask: str
     value: str | None = None
     resolvable_by: tuple[str, ...] = ()
+    resolution: Resolution = "ask_user"
+
+    @property
+    def instruction(self) -> str:
+        """What the agent should actually do about this slot, in its own words."""
+        if self.resolution == "call_tool":
+            return f"закройте пробел вызовом {' или '.join(self.resolvable_by)}, не спрашивая пользователя"
+        if self.resolution == "drop_filter":
+            # Spelled out because the first thing a model does with "remove this
+            # argument" is send it as "" or null instead of omitting the key —
+            # which reads to the gate as "no filter" but is still a different
+            # request downstream.
+            return (
+                f"НЕ передавайте ключ `{self.field}` вовсе (не пустую строку, не null) "
+                f"и повторите вызов — пользователь этот фильтр не просил"
+            )
+        return self.ask
 
 
 @dataclass(frozen=True)
@@ -416,11 +447,14 @@ class GateDecision:
                         "why": s.why,
                         "ask": s.ask,
                         "resolvable_by": list(s.resolvable_by),
+                        "resolution": s.resolution,
+                        "do": s.instruction,
                     }
                     for s in self.slots
                 ],
                 "resolve_one_of": [
-                    "спросите пользователя (предпочтительно) и повторите вызов",
+                    "выполните `do` каждого слота — это самый короткий путь",
+                    "спросите пользователя, если `resolution` = ask_user, и повторите вызов",
                     "вызовите один из resolvable_by, если он не пуст, затем повторите",
                     f'повторите вызов с {ASSUME_KEY}={{"<поле>": "<обоснование допущения>"}} — '
                     "данные придут вместе с обязательной преамбулой для ответа",
@@ -473,13 +507,38 @@ class SessionPremises:
     # set by `assess_request`; lets values the user actually typed clear the gate
     # without a second round-trip — the payoff for running the cheap preflight
     user_request: str = ""
+    # Parsed tool_results this session has already delivered, newest last. Kept so
+    # `check_groundedness` can verify an answer against the evidence the PROXY saw
+    # rather than making the agent copy tens of KB of JSON back into an argument —
+    # which cost it thousands of output tokens and truncated often enough to fail
+    # the check outright. It also closes a hole: evidence the agent hands in is
+    # evidence the agent chose, and a convenient payload could "confirm" a claim
+    # the real result never supported.
+    results: list[Any] = field(default_factory=list)
+    _result_bytes: list[int] = field(default_factory=list, repr=False)
+
+    def result_payloads(self) -> list[Any]:
+        """The grounding evidence set, oldest first."""
+        return list(self.results)
+
+    def _remember_payload(self, payload: Any, size: int) -> None:
+        """Bounded on purpose: a long session must not grow without limit, and on a
+        shared deployment 256 of them must not either. Oldest first out — the answer
+        being checked is nearly always built on the most recent results."""
+        self.results.append(payload)
+        self._result_bytes.append(size)
+        while len(self.results) > MAX_RESULT_PAYLOADS or sum(self._result_bytes) > MAX_RESULT_BYTES:
+            self.results.pop(0)
+            self._result_bytes.pop(0)
 
     def record_result(self, result_text: str) -> None:
-        """Index every scalar in a tool_result so later calls can cite it."""
+        """Index every scalar in a tool_result so later calls can cite it, and keep
+        the payload itself as evidence for `check_groundedness`."""
         try:
             payload = json.loads(result_text)
         except (json.JSONDecodeError, TypeError):
             return
+        self._remember_payload(payload, len(result_text))
         stack = [payload]
         while stack and len(self.seen_values) < MAX_SEEN_VALUES:
             node = stack.pop()
@@ -516,18 +575,27 @@ class SessionPremises:
         Records any declared assumption as a side effect, so `preamble()` can
         force it into the first sentence of the answer afterwards.
         """
-        policies = POLICIES.get(tool)
-        if policies is None:
-            return None
-
-        # A declared assumption is honored wherever it appears, even on a field the
-        # gate would have let through: the agent is telling us this value is its own
-        # invention, and that claim outranks our guess about whether it mattered.
+        # A declared assumption is honored wherever it appears: on a field the gate
+        # would have let through, and on a tool with no policy at all. The agent is
+        # telling us this value is its own invention, and that claim outranks our
+        # guess about whether it mattered.
+        #
+        # Recorded BEFORE the no-policy exit below, because by this point
+        # `strip_control_fields` has already taken the key out of the outgoing call.
+        # Dropping it here would erase the declaration entirely: the answer would
+        # lose its mandatory preamble, and `check_groundedness` would score the value
+        # `unavailable` — "invented silently" — which is the opposite of what the
+        # agent just did. Most of the catalog carries no policy, so that exit was the
+        # common path, not the rare one.
         for name, rationale in assume.items():
             raw = arguments.get(name)
             self.assumptions[name] = Assumption(
                 name, ", ".join(_values_of(raw)) if raw is not None else "не задано", rationale
             )
+
+        policies = POLICIES.get(tool)
+        if policies is None:
+            return None
 
         unsettled: list[Slot] = []
 
@@ -553,6 +621,9 @@ class SessionPremises:
                         why=policy.why,
                         ask=policy.ask,
                         resolvable_by=policy.resolvable_by,
+                        # A blocking field is missing, so there is nothing to drop:
+                        # only the user (or a tool) can supply what isn't there.
+                        resolution="call_tool" if policy.resolvable_by else "ask_user",
                     )
                 )
                 continue
@@ -579,6 +650,11 @@ class SessionPremises:
                     ask=policy.ask,
                     value=", ".join(values),
                     resolvable_by=policy.resolvable_by,
+                    # The value is present and unsourced, i.e. the agent supplied a
+                    # filter of its own. Dropping it restores exactly what the user
+                    # asked for, so bothering them about it is over-asking — the
+                    # regression this branch exists to prevent.
+                    resolution="call_tool" if policy.resolvable_by else "drop_filter",
                 )
             )
 
@@ -711,14 +787,22 @@ def run_assess_request_tool(
                     "why": slot.why,
                     "ask": slot.ask,
                     "resolvable_by": list(slot.resolvable_by),
+                    "resolution": slot.resolution,
+                    "do": slot.instruction,
                 }
             )
 
-    resolvable = [b for b in blocking if b["resolvable_by"]]
-    if session.conflicts or (blocking and not resolvable):
+    # Ordered by how much they cost the user: interrupting them beats a wrong
+    # answer, but it loses to anything the agent can fix on its own. A filter the
+    # agent invented is exactly that — dropping it needs nobody.
+    needs_user = [b for b in blocking if b["resolution"] == "ask_user"]
+    needs_tool = [b for b in blocking if b["resolution"] == "call_tool"]
+    if session.conflicts or needs_user:
         verdict = "ask_user_first"
-    elif resolvable:
+    elif needs_tool:
         verdict = "resolve_with_tool"
+    elif blocking:
+        verdict = "drop_invented_filters"
     else:
         verdict = "proceed"
 
@@ -739,6 +823,10 @@ def run_assess_request_tool(
                     "resolve_with_tool": (
                         "сначала закройте пробел вызовом из resolvable_by, "
                         "спрашивать пользователя рано"
+                    ),
+                    "drop_invented_filters": (
+                        "уберите перечисленные фильтры из аргументов и ищите — "
+                        "пользователь их не просил, спрашивать не о чем"
                     ),
                     "proceed": "критичных пробелов нет — можно искать",
                 }[verdict],

@@ -132,6 +132,25 @@ def test_declared_assumption_lets_the_call_through_but_forces_a_preamble():
     assert "типовой бюджет поездки" in session.preamble()
 
 
+def test_declared_assumption_survives_on_a_tool_with_no_policy():
+    """Most of the catalog has no premise policy, and that used to be the branch
+    that dropped `_assume` on the floor: `strip_control_fields` had already taken
+    the key out of the call, so the declaration vanished with it. The answer lost
+    its preamble and `check_groundedness` scored the value `unavailable` —
+    "invented silently" — for an agent that had just said the opposite out loud.
+    """
+    session = SessionPremises()
+
+    decision = session.evaluate(
+        "get_offer_details", {"details_ref": "R-77"}, {}, {"details_ref": "выбрал сам"}
+    )
+
+    assert decision is None
+    assert "details_ref" in session.preamble()
+    assert "выбрал сам" in session.preamble()
+    assert session.assumed_values() == {"r-77"}
+
+
 def test_gate_fires_once_then_releases_as_an_assumption():
     """Without this the agent can loop forever, which on stage looks like a hang."""
     session = SessionPremises()
@@ -445,3 +464,73 @@ def test_blocking_field_value_is_not_traced_to_the_user_by_design():
         )
         is None
     )
+
+
+def test_an_invented_filter_is_dropped_not_asked_about():
+    """The regression this branch exists for: the agent added `direct_only=True`
+    on a request that never mentioned connections, and the gate turned that into
+    a question to the user — who then got interrogated about their own request."""
+    session = SessionPremises(user_request="Найди самый дешёвый поезд Санкт-Петербург — Москва")
+    decision = session.evaluate(
+        "search_rail",
+        {"departure_date": "2026-08-25", "direct_only": True},
+        {},
+        {},
+    )
+
+    assert decision is not None
+    slot = next(s for s in decision.slots if s.field == "direct_only")
+    assert slot.resolution == "drop_filter"
+    # the wording has to rule out "send it as empty" — that is what the model did
+    assert "не передавайте" in slot.instruction.lower()
+    assert "не пустую строку" in slot.instruction
+
+
+def test_a_missing_blocking_field_still_goes_to_the_user():
+    """Dropping is only right when there IS something to drop. An absent blocking
+    field cannot be dropped — nobody but the user can supply it."""
+    session = SessionPremises(user_request="Найди отель в Санкт-Петербурге")
+    decision = session.evaluate("search_hotels", {"check_in": "2026-09-01"}, {}, {})
+
+    assert decision is not None
+    slot = next(s for s in decision.slots if s.field == "adults")
+    assert slot.resolution == "ask_user"
+    assert slot.instruction == slot.ask
+
+
+def test_preflight_tells_the_agent_to_drop_its_own_filter():
+    session = SessionPremises()
+    text, is_error = run_assess_request_tool(
+        {
+            "user_request": "Найди самый дешёвый поезд Санкт-Петербург — Москва на 2026-08-25.",
+            "planned_calls": [
+                {
+                    "tool": "search_rail",
+                    "arguments": {"departure_date": "2026-08-25", "direct_only": True},
+                }
+            ],
+        },
+        session,
+        today=TODAY,
+    )
+    report = json.loads(text)
+
+    assert not is_error
+    assert report["verdict"] == "drop_invented_filters"
+    assert "уберите" in report["next_step"].lower()
+    assert "не передавайте" in report["blocking_slots"][0]["do"].lower()
+    assert report["blocking_slots"][0]["resolution"] == "drop_filter"
+
+
+def test_a_user_stated_filter_is_neither_dropped_nor_asked_about():
+    """Dropping a filter the user DID ask for would silently widen their search —
+    the mirror image of the bug, and just as wrong."""
+    session = SessionPremises(user_request="Нужен только прямой поезд, без пересадок")
+    decision = session.evaluate(
+        "search_rail",
+        {"departure_date": "2026-08-25", "direct_only": True},
+        {"direct_only": "user"},
+        {},
+    )
+
+    assert decision is None

@@ -1,4 +1,6 @@
-from tutu_mcp.groundedness import check_groundedness
+import json
+
+from tutu_mcp.groundedness import check_groundedness, run_check_groundedness_tool
 
 from .conftest import load_result_payload
 
@@ -71,3 +73,40 @@ def test_our_own_error_payload_does_not_ground_the_value_it_echoes():
 
     assert all(not check.grounded for check in report.checks)
     assert report.ignored_error_payloads == 1
+
+
+def test_the_check_defaults_to_what_the_proxy_delivered():
+    """No `tool_result_json` at all: the proxy checks against the results it
+    already handed the agent, so the agent never copies payloads back."""
+    text, is_error = run_check_groundedness_tool(
+        {"answer_text": "Цена 1 301,88 ₽"},
+        session_payloads=[{"offers": [{"price": {"amount": 1301.88, "currency": "RUB"}}]}],
+    )
+    report = json.loads(text)
+
+    assert not is_error
+    assert report["groundedness_rate"] == 1.0
+
+
+def test_agent_supplied_evidence_only_adds_to_the_session_evidence():
+    """A payload the agent passes in supplements what the proxy saw — it cannot
+    replace it, so an agent cannot swap in a friendlier set of facts."""
+    text, _ = run_check_groundedness_tool(
+        {
+            "answer_text": "Цена 1 301,88 ₽ и цена 999 ₽",
+            "tool_result_json": ['{"offers": [{"price": {"amount": 999}}]}'],
+        },
+        session_payloads=[{"offers": [{"price": {"amount": 1301.88}}]}],
+    )
+    report = json.loads(text)
+
+    assert {c["text"] for c in report["claims"]} == {"1 301,88 ₽", "999 ₽"}
+    assert all(c["grounded"] for c in report["claims"])
+
+
+def test_a_check_with_no_evidence_at_all_is_an_error_not_a_pass():
+    """Zero payloads used to mean zero claims to contradict, i.e. a free pass."""
+    text, is_error = run_check_groundedness_tool({"answer_text": "Цена 1 301,88 ₽"})
+
+    assert is_error
+    assert "не с чем сверять" in text

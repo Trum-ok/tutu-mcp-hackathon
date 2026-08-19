@@ -170,6 +170,11 @@ def _flatten(
 ) -> None:
     if isinstance(payload, dict):
         for k, v in payload.items():
+            # Our own annotations (`_answer_preamble`) are not Tutu's data, and a
+            # preamble quotes the very assumed value the check is meant to expose —
+            # indexing it would let an assumption confirm itself as fact.
+            if k.startswith("_"):
+                continue
             _flatten(v, price_numbers, strings, key=k)
     elif isinstance(payload, list):
         for v in payload:
@@ -287,8 +292,13 @@ def report_to_json(report: GroundednessReport) -> str:
 
 class CheckGroundednessArgs(BaseModel):
     answer_text: str = Field(description="The drafted answer text to check.")
-    tool_result_json: list[str] = Field(
-        description="Raw JSON text of every tool_result the answer is based on."
+    tool_result_json: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional. Leave it out — the proxy checks against the tool_results it "
+            "already delivered you this session. Pass raw JSON only for evidence the "
+            "proxy never saw."
+        ),
     )
 
 
@@ -296,9 +306,12 @@ CHECK_GROUNDEDNESS_TOOL = tool_spec(
     "check_groundedness",
     (
         "Deterministically check a drafted answer against the tool_result payload(s) it was "
-        "based on. Pass the answer text and the raw JSON text of every tool_result you used "
-        "this turn; returns which price/time/code/URL claims are grounded vs unsupported by "
-        "that data, plus a groundedness rate."
+        "based on. Normally you pass ONLY `answer_text`: the proxy already holds every "
+        "tool_result it delivered you this session and checks against those, so do not "
+        "copy payloads back — that costs you thousands of tokens and truncates. Pass "
+        "`tool_result_json` only for evidence that did not come through this proxy. "
+        "Returns which price/time/code/URL claims are grounded vs unsupported by that "
+        "data, plus a groundedness rate."
     ),
     CheckGroundednessArgs,
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True},
@@ -310,6 +323,7 @@ def run_check_groundedness_tool(
     *,
     assumed_values: set[str] | None = None,
     assumptions: list[str] | None = None,
+    session_payloads: list[Any] | None = None,
 ) -> tuple[str, bool]:
     """The `check_groundedness` tool body, as `(result_text, is_error)`.
 
@@ -319,17 +333,34 @@ def run_check_groundedness_tool(
     `assumed_values` / `assumptions` are supplied by the CALLER from the session's
     premise state, never by the agent: an agent that could omit them would be able
     to hide its own assumptions from the check meant to expose them.
+
+    `session_payloads` is the same idea applied to the evidence itself — the
+    tool_results the proxy delivered this session. It is the default source, and
+    `tool_result_json` only supplements it, because evidence the agent selects is
+    evidence the agent can select FAVOURABLY. Copying payloads back also cost it
+    thousands of output tokens and truncated often enough to fail the check on
+    transport rather than on substance.
     """
     args = parse_args(CheckGroundednessArgs, arguments)
     if isinstance(args, str):
         return args, True
 
     answer_text = args.answer_text
+    payloads: list[Any] = list(session_payloads or [])
     try:
-        payloads = [json.loads(raw) for raw in args.tool_result_json]
+        payloads += [json.loads(raw) for raw in args.tool_result_json or []]
     except json.JSONDecodeError as exc:
         # a shape pydantic cannot catch: valid list[str], invalid JSON inside
         return f"invalid arguments: tool_result_json содержит не-JSON: {exc}", True
+
+    if not payloads:
+        # Nothing to check against: claiming an answer is grounded on no evidence
+        # would be a worse answer than admitting the check cannot run.
+        return (
+            "не с чем сверять: прокси не видел ни одного tool_result в этой сессии, "
+            "а tool_result_json не передан. Сначала выполните поиск.",
+            True,
+        )
 
     report = check_groundedness(
         answer_text, payloads, assumed_values=assumed_values, assumptions=assumptions

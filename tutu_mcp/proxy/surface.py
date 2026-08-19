@@ -38,6 +38,9 @@ def _run_check_groundedness(
         arguments,
         assumed_values=session.assumed_values(),
         assumptions=session.assumption_lines(),
+        # Evidence comes from what this proxy actually delivered, not from what the
+        # agent chose to hand back — see the tool's docstring.
+        session_payloads=session.result_payloads(),
     )
 
 
@@ -69,10 +72,15 @@ PROXY_INSTRUCTIONS = (
     "local, free and instant) — it surfaces which parameters are blocking, flags a date "
     "that contradicts the weekday the user gave, and lets values the user actually typed "
     "pass the gate without a retry. When a search argument has no such source, the call "
-    f"returns `{GATE_STATUS}` INSTEAD of data, and you resolve it one of three ways: ask "
-    'the user (preferred), repeat the call with `_sources={"<field>": "user"}` if the '
-    'user did supply it, or repeat with `_assume={"<field>": "<rationale>"}` to proceed '
-    "on an openly declared assumption. In that last case the result carries a preamble your "
+    f"returns `{GATE_STATUS}` INSTEAD of data. Every blocked slot carries a `do` saying "
+    "how to close it and a `resolution` naming its kind: `drop_filter` means YOU invented "
+    "that filter — remove the argument and repeat, and do NOT ask the user about a "
+    "constraint they never mentioned; `call_tool` means another tool closes the gap; "
+    "`ask_user` means only the user can, and that is the one worth interrupting them for. "
+    'You may also repeat the call with `_sources={"<field>": "user"}` if the user did '
+    'supply the value, or with `_assume={"<field>": "<rationale>"}` to proceed on an '
+    "openly declared assumption. In that last case the result carries `_answer_preamble` "
+    "— a field INSIDE the returned JSON — holding a preamble your "
     f"answer MUST OPEN with — `{CHECK_GROUNDEDNESS_TOOL['name']}` fails an answer that "
     "discloses an assumption only at the end, or not at all. Both `_sources` and `_assume` "
     "are stripped before the call reaches Tutu, so no upstream schema changes."

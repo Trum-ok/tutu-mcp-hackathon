@@ -14,6 +14,7 @@ from evals.agent import ScriptedAgent
 from evals.runner import run_scenario
 from evals.scenarios import select
 from evals.variants import BASELINE, PROXY, build_variants
+from tutu_mcp.premises import ASSUME_KEY
 from tutu_mcp.replay.mock_client import MockUpstreamClient
 
 RAIL_ARGS = {
@@ -199,3 +200,31 @@ async def test_control_tools_refuse_calls_on_the_baseline_surface(backend, repo_
 
     assert result.is_error is True
     assert result.result_text == f"unknown tool: {tool}"
+
+
+async def test_declared_assumption_downgrades_the_claim_instead_of_failing_it(
+    backend, repo_fixtures
+):
+    """The whole point of `_assume`: openly invented is not the same failure as
+    silently invented, and the two must not share a color in the report. Runs
+    through the proxy variant end to end, because the value has to survive
+    `strip_control_fields`, the gate, and the session's `assumed_values()` to
+    reach `check_groundedness` — a chain that was broken for every tool without
+    a premise policy.
+    """
+    variant = (await _variant(backend, repo_fixtures, PROXY)).session_scope()
+
+    # A real search first: `check_groundedness` refuses to score an answer when the
+    # session holds no evidence at all, and the assumed value must be judged against
+    # evidence that genuinely does not contain it.
+    await variant.execute("search_rail", RAIL_ARGS)
+    await variant.execute(
+        "get_offer_details",
+        {"details_ref": "нет-такого", "price_max": 7712, ASSUME_KEY: {"price_max": "мой потолок"}},
+    )
+    record = await variant.execute(
+        "check_groundedness", {"answer_text": "Дороже 7712 ₽ ничего не рассматривал."}
+    )
+
+    statuses = {c["text"]: c["status"] for c in json.loads(record.result_text)["claims"]}
+    assert statuses["7712 \u20bd"] == "assumed"
