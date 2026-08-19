@@ -31,26 +31,32 @@ class Check(Protocol):
 
 @dataclass(frozen=True)
 class AllClaimsGrounded:
-    """Every extractable claim (price/time/code/URL) traces back to a tool_result.
+    """No claim in the answer (price/time/code/URL) was invented.
+
+    Fails on `unavailable` only, not on everything that is merely not `confirmed`.
+    A disclosed assumption and a threshold the user themselves named are both
+    unconfirmed by the payload and neither is a fabrication — failing them punished
+    an answer for restating the question it was asked.
 
     `require_any` guards the degenerate pass: an answer with no checkable claims at
     all would otherwise score a free 100%, which is exactly how a vague non-answer
-    could beat a specific correct one.
+    could beat a specific correct one. A quoted threshold does not count towards it
+    — echoing "дешевле 3000 ₽" is not the same as reporting a price.
     """
 
     require_any: bool = True
 
     def run(self, transcript: Transcript, grounding: GroundednessReport) -> CheckResult:
         name = "all_claims_grounded"
-        if not grounding.checks:
+        if not grounding.checkable:
             if self.require_any:
                 return CheckResult(name, False, "в ответе нет ни одного проверяемого утверждения")
             return CheckResult(name, True, "проверяемых утверждений нет")
-        bad = grounding.ungrounded
+        bad = grounding.fabricated
         if bad:
             listed = ", ".join(repr(c.claim.text) for c in bad[:5])
-            return CheckResult(name, False, f"не подтверждено: {listed}")
-        return CheckResult(name, True, f"{len(grounding.checks)} утверждений подтверждено")
+            return CheckResult(name, False, f"не подтверждено данными: {listed}")
+        return CheckResult(name, True, f"{len(grounding.checkable)} утверждений подтверждено")
 
 
 @dataclass(frozen=True)

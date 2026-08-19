@@ -110,3 +110,43 @@ def test_a_check_with_no_evidence_at_all_is_an_error_not_a_pass():
 
     assert is_error
     assert "не с чем сверять" in text
+
+
+def test_a_threshold_the_user_named_is_not_a_fabrication():
+    """ "поезда дешевле 3000 ₽" restated in the answer is the request quoted back.
+    No payload owes us that number, and scoring it as invented failed a correct
+    answer on both variants."""
+    report = check_groundedness(
+        "Нашлось 4 поезда дешевле 3000 ₽, самый дешёвый 1 301,88 ₽",
+        [{"offers": [{"price": {"amount": 1301.88}}]}],
+        user_request="Поезда Санкт-Петербург — Москва дешевле 3000 рублей",
+    )
+    by_text = {c.claim.text: c for c in report.checks}
+
+    assert by_text["3000 ₽"].status == "user_stated"
+    assert not by_text["3000 ₽"].fabricated
+    assert by_text["1 301,88 ₽"].status == "confirmed"
+    # the quoted threshold is out of the denominator, so the rate stays honest
+    assert report.rate == 1.0
+
+
+def test_a_price_in_both_the_request_and_the_payload_stays_confirmed():
+    """Evidence beats a citation — otherwise quoting a number would downgrade it."""
+    report = check_groundedness(
+        "Цена 1 301,88 ₽",
+        [{"offers": [{"price": {"amount": 1301.88}}]}],
+        user_request="есть вариант за 1 301,88 ₽?",
+    )
+
+    assert [c.status for c in report.checks] == ["confirmed"]
+
+
+def test_a_number_the_user_never_said_is_still_a_fabrication():
+    report = check_groundedness(
+        "Цена 9 999 ₽",
+        [{"offers": [{"price": {"amount": 1301.88}}]}],
+        user_request="самый дешёвый поезд",
+    )
+
+    assert report.fabricated
+    assert report.rate == 0.0

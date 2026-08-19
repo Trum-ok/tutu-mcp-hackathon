@@ -13,7 +13,8 @@ A claim that is absent from the payload is not automatically a fabrication:
 it may be a value the agent openly ASSUMED and declared through the premise gate
 (`tutu_mcp/premises.py`). Those two deserve different colors in a trace, so a check
 carries a `status` — `confirmed` (in the payload), `assumed` (declared upfront),
-or `unavailable` (in neither, i.e. invented) — and the report additionally
+`user_stated` (the user's own threshold quoted back, which no payload owes us),
+or `unavailable` (in none of those, i.e. invented) — and the report additionally
 verifies that any assumption was disclosed in the OPENING of the answer rather
 than in a closing caveat nobody reads.
 
@@ -26,6 +27,7 @@ cut, not an oversight.
 import json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -58,7 +60,7 @@ class Claim:
 @dataclass(frozen=True)
 class ClaimCheck:
     claim: Claim
-    status: str  # "confirmed" | "assumed" | "unavailable"
+    status: str  # "confirmed" | "assumed" | "user_stated" | "unavailable"
 
     @property
     def grounded(self) -> bool:
@@ -66,6 +68,13 @@ class ClaimCheck:
         only a value actually present in a tool_result counts as grounded. An
         assumption is disclosed, not proven."""
         return self.status == "confirmed"
+
+    @property
+    def fabricated(self) -> bool:
+        """The failure this module exists to catch: a value that came from nowhere.
+        Distinct from `not grounded`, which also covers a disclosed assumption and
+        the user's own words quoted back — neither is the model making things up."""
+        return self.status == "unavailable"
 
 
 # how far into an answer a disclosure still counts as "upfront". Roughly the
@@ -104,14 +113,28 @@ class GroundednessReport:
         return self.disclosure_position is not None
 
     @property
+    def checkable(self) -> list[ClaimCheck]:
+        """Claims a payload could, in principle, confirm.
+
+        A threshold the user themselves named ("дешевле 3000 ₽") is not one: it is
+        the request restated, and no tool_result is obliged to contain it. Scoring
+        it as ungrounded punished a correct answer for repeating the question.
+        """
+        return [c for c in self.checks if c.status != "user_stated"]
+
+    @property
     def rate(self) -> float | None:
-        if not self.checks:
+        if not self.checkable:
             return None
-        return sum(1 for c in self.checks if c.grounded) / len(self.checks)
+        return sum(1 for c in self.checkable if c.grounded) / len(self.checkable)
 
     @property
     def ungrounded(self) -> list[ClaimCheck]:
         return [c for c in self.checks if not c.grounded]
+
+    @property
+    def fabricated(self) -> list[ClaimCheck]:
+        return [c for c in self.checks if c.fabricated]
 
 
 def extract_claims(answer_text: str) -> list[Claim]:
@@ -138,6 +161,11 @@ def extract_claims(answer_text: str) -> list[Claim]:
         claims.append(Claim(kind="code", text=match.group(0), value=match.group(0).upper()))
 
     return claims
+
+
+@lru_cache(maxsize=512)
+def _WORD_BOUNDED(value: str) -> re.Pattern[str]:  # noqa: N802 - reads as a constructor
+    return re.compile(rf"(?<!\w){re.escape(value)}(?!\w)", re.IGNORECASE)
 
 
 _PRICE_KEY_HINTS = ("price", "amount")
@@ -223,12 +251,24 @@ def _claim_spellings(claim: Claim) -> set[str]:
     return forms
 
 
+def _stated_by_user(claim: Claim, user_request: str) -> bool:
+    """Whether this exact value appears in the user's own request.
+
+    Word-bounded, like the premise gate's own provenance check: a substring match
+    would find "3000" inside an offer id and clear a fabricated price.
+    """
+    if not user_request:
+        return False
+    return any(_WORD_BOUNDED(form).search(user_request) for form in _claim_spellings(claim) if form)
+
+
 def check_groundedness(
     answer_text: str,
     tool_results: list[Any],
     *,
     assumed_values: set[str] | None = None,
     assumptions: list[str] | None = None,
+    user_request: str = "",
 ) -> GroundednessReport:
     """`tool_results` are the parsed JSON payloads of every `tool_result` the agent
     saw this turn (i.e. `json.loads(content[0].text)` for each `tools/call` response).
@@ -256,6 +296,10 @@ def check_groundedness(
             status = "confirmed"
         elif assumed & _claim_spellings(claim):
             status = "assumed"
+        elif _stated_by_user(claim, user_request):
+            # The user's own constraint, restated. Checked AFTER the payload so a
+            # value that is both stays `confirmed` — evidence beats a citation.
+            status = "user_stated"
         else:
             status = "unavailable"
         checks.append(ClaimCheck(claim=claim, status=status))
@@ -324,6 +368,7 @@ def run_check_groundedness_tool(
     assumed_values: set[str] | None = None,
     assumptions: list[str] | None = None,
     session_payloads: list[Any] | None = None,
+    user_request: str = "",
 ) -> tuple[str, bool]:
     """The `check_groundedness` tool body, as `(result_text, is_error)`.
 
@@ -363,7 +408,11 @@ def run_check_groundedness_tool(
         )
 
     report = check_groundedness(
-        answer_text, payloads, assumed_values=assumed_values, assumptions=assumptions
+        answer_text,
+        payloads,
+        assumed_values=assumed_values,
+        assumptions=assumptions,
+        user_request=user_request,
     )
     # An undisclosed assumption is a failed check, not a footnote on a passing one.
     return report_to_json(report), report.assumption_disclosed is False
