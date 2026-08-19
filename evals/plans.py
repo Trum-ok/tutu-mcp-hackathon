@@ -131,7 +131,9 @@ SELF_CHECK: dict[tuple[str, str], frozenset[str]] = {
         {"all_claims_grounded", "min_grounded_price_1", "min_grounded_url_1"}
     ),
     ("rail_missing_train_number", PROXY): frozenset(),
-    ("rail_missing_train_number", BASELINE): frozenset({"avoids_timetable_claim"}),
+    ("rail_missing_train_number", BASELINE): frozenset(
+        {"avoids_timetable_claim", "says_not_on_sale"}
+    ),
     ("hotels_missing_field", PROXY): frozenset(),
     ("hotels_missing_field", BASELINE): frozenset({"admits_missing_field"}),
 }

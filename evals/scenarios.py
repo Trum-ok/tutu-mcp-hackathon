@@ -16,6 +16,7 @@ from evals.options import SelectionError
 from .checks import (
     ABSENCE_CLAIM_PHRASES,
     FIELD_MISSING_PHRASES,
+    NOT_ON_SALE_PHRASES,
     TYPO_HINT_PHRASES,
     AllClaimsGrounded,
     AnswerAvoids,
@@ -82,6 +83,10 @@ SCENARIOS: list[Scenario] = [
         checks=[
             UsedTool("search_rail"),
             AnswerAvoids(ABSENCE_CLAIM_PHRASES, label="avoids_timetable_claim"),
+            # The positive half of the same rule: refusing the timetable claim is
+            # only half an honest answer — the other half is naming what the empty
+            # result DOES mean, which is the sentence the proxy's note supplies.
+            AnswerMentions(NOT_ON_SALE_PHRASES, label="says_not_on_sale"),
         ],
         probes=(
             "ключевой кейс из статьи: пустой отфильтрованный результат означает "
