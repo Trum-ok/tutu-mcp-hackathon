@@ -1,0 +1,28 @@
+# Terminates TLS (Let's Encrypt, automatic) and forwards to the proxy container.
+#
+# `flush_interval -1` is the one setting that is not optional: Streamable HTTP
+# answers a tools/call with an SSE stream, and a reverse proxy that buffers it
+# holds every event until the response ends — the client sits there with an open
+# request and no tools. Caddy detects text/event-stream on its own, but the proxy
+# also answers some requests as plain JSON over the same route, so it is pinned
+# here rather than left to detection.
+#
+# The secret path prefix is what stands between a live-mode deployment and the
+# hackathon's shared rate limit at mcp.tutu.ru: the proxy has no auth of its own
+# (neither does upstream), so an address anyone could guess is an address anyone
+# could spend. `handle_path` strips the prefix, so the container still sees the
+# plain /mcp it serves. Basic auth would be the stronger answer, but a connector
+# UI that only takes a URL has nowhere to type a password — a URL nobody else
+# holds is the protection that actually survives contact with the client.
+{$MCP_DOMAIN} {
+	handle_path /{$MCP_SECRET}/* {
+		reverse_proxy proxy:8800 {
+			flush_interval -1
+		}
+	}
+
+	# Anything else looks like an empty host, not like a service worth probing.
+	handle {
+		respond 404
+	}
+}

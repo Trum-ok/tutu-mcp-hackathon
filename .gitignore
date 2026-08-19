@@ -55,3 +55,4 @@ viewer/trace-viewer.html
 
 # site/ is entirely generated (docs page + trace viewer) — pages/ is the source
 site/
+.env.deploy

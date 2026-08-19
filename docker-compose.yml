@@ -1,0 +1,41 @@
+# VPS deployment: the same image the Dockerfile builds, behind Caddy for TLS.
+# Only Caddy is published; the proxy itself is reachable on the compose network
+# alone, so nothing answers on the host's :8800 for a port scanner to find.
+#
+# Mock mode stays the default here for the same reason it is the default in the
+# Dockerfile: a public URL anyone may poke must not spend the hackathon's shared
+# rate limit at mcp.tutu.ru. Set TUTU_PROXY_MODE=live in .env.deploy to proxy the
+# real server — and only together with MCP_SECRET, which is what keeps that URL
+# from being an address anyone can guess and spend (see the Caddyfile).
+services:
+  proxy:
+    build: .
+    restart: unless-stopped
+    environment:
+      TUTU_PROXY_MODE: ${TUTU_PROXY_MODE:-mock}
+      TUTU_PROXY_HOST: 0.0.0.0
+      PORT: 8800
+    expose:
+      - "8800"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # The hostname the certificate is issued for; also what goes into the docs.
+      MCP_DOMAIN: ${MCP_DOMAIN:?set MCP_DOMAIN in .env.deploy, e.g. mcp.example.com}
+      # Unguessable path prefix; the served URL is https://$MCP_DOMAIN/$MCP_SECRET/mcp
+      MCP_SECRET: ${MCP_SECRET:?set MCP_SECRET in .env.deploy, e.g. `python3 -c "import secrets; print(secrets.token_urlsafe(18))"`}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - proxy
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,6 +1,7 @@
 .git/
 .venv/
 .env
+.env.deploy
 .idea/
 .vscode/
 .ruff_cache/
@@ -13,3 +14,9 @@ tests/
 viewer/
 site/
 out/
+node_modules/
+package.json
+package-lock.json
+local/
+pages/
+.coverage
