@@ -1,10 +1,13 @@
 import json
+from copy import deepcopy
 
 from tutu_mcp.proxy.compact_tools import (
     APPENDIX_TARGETS,
     SCHEMA_HINT_CHARS,
+    SOURCE_DIGESTS,
     apply_compact_overrides,
     apply_result_appendix,
+    description_digest,
 )
 
 from .conftest import REPO_FIXTURES_DIR
@@ -132,3 +135,62 @@ def test_appendix_is_a_no_op_for_unrelated_tools():
     result = apply_result_appendix("create_checkout_link", "UNRELATED_RESULT", trimmed_originals)
 
     assert result == "UNRELATED_RESULT"
+
+
+def _renamed(old: str, new: str) -> list[dict]:
+    tools = deepcopy(RAW_TOOLS)
+    for tool in tools:
+        if tool["name"] == old:
+            tool["name"] = new
+    return tools
+
+
+def test_source_digests_still_match_the_recorded_catalog():
+    """Each override summarizes a specific upstream text. When the fixture is
+    re-recorded this test fails, which is the point: someone has to re-read the
+    new description and decide the summary still holds, instead of the mismatch
+    passing unnoticed."""
+    for tool in RAW_TOOLS:
+        expected = SOURCE_DIGESTS.get(tool["name"])
+        if expected is not None:
+            assert description_digest(tool["description"]) == expected, (
+                f"{tool['name']}'s upstream description changed — re-read it, then "
+                f"update COMPACT_DESCRIPTIONS and SOURCE_DIGESTS together"
+            )
+
+
+def test_a_renamed_instructions_tool_stops_compaction_instead_of_losing_the_prose():
+    """The failure this guards against was silent: with the appendix target gone,
+    `apply_result_appendix` had nowhere to splice the trimmed prose, so ~9 KB of
+    `search_rail` semantics vanished from both tools/list and every call result."""
+    tools = _renamed("get_rail_instructions", "get_rail_playbook")
+
+    compacted, trimmed = apply_compact_overrides(tools)
+    by_name = {t["name"]: t for t in compacted}
+    original = {t["name"]: t for t in tools}
+
+    assert by_name["search_rail"]["description"] == original["search_rail"]["description"]
+    assert by_name["get_rail_seatmap"]["description"] == original["get_rail_seatmap"]["description"]
+    assert "search_rail" not in trimmed
+    # The unaffected domain keeps its saving: the degradation is per-tool, not global.
+    assert len(by_name["search_hotels"]["description"]) < len(
+        original["search_hotels"]["description"]
+    )
+
+
+def test_a_rewritten_upstream_description_is_passed_through_untouched():
+    """An override is a hand-written summary of a text we read once. Once that text
+    changes, the summary may describe behavior the tool no longer has."""
+    tools = deepcopy(RAW_TOOLS)
+    for tool in tools:
+        if tool["name"] == "search_hotels":
+            tool["description"] += " Новое поведение, которого мы не читали."
+
+    compacted, trimmed = apply_compact_overrides(tools)
+    by_name = {t["name"]: t for t in compacted}
+
+    assert by_name["search_hotels"]["description"].endswith("которого мы не читали.")
+    assert "search_hotels" not in trimmed
+    assert len(by_name["search_rail"]["description"]) < len(
+        next(t["description"] for t in RAW_TOOLS if t["name"] == "search_rail")
+    )

@@ -35,8 +35,12 @@ wrong fare gets charged), and safely trimming it needs eval coverage this
 scaffold doesn't have yet.
 """
 
+import hashlib
+import logging
 from copy import deepcopy
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 COMPACT_DESCRIPTIONS: dict[str, str] = {
     "search_rail": (
@@ -101,6 +105,66 @@ APPENDIX_TARGETS: dict[str, str] = {
     "search_multitransport": "get_multitransport_instructions",
 }
 
+# sha1 of the upstream description each override in `COMPACT_DESCRIPTIONS` was
+# written against, as recorded in `fixtures/_meta/tools_list.json`. An override is
+# a hand-written SUMMARY of a specific text: once Tutu rewrites that text, the
+# summary may be describing behavior the tool no longer has, and shipping it would
+# be worse than shipping the long original. `test_compact_tools.py` recomputes
+# these from the fixture, so updating the catalog forces a deliberate re-read
+# rather than a silent mismatch.
+SOURCE_DIGESTS: dict[str, str] = {
+    "search_rail": "b0700e946958",
+    "get_rail_seatmap": "45901d053cbc",
+    "search_hotels": "6565067fe5c2",
+}
+
+
+def description_digest(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
+def compactable(tools: list[dict[str, Any]]) -> set[str]:
+    """Which tools may be compacted against THIS catalog.
+
+    Two ways a tool drops out, both of which used to pass unnoticed:
+
+    * its appendix target is gone (Tutu renamed or dropped
+      `get_<domain>_instructions`) — the trimmed prose would have nowhere
+      on-demand to go, so `apply_result_appendix` would splice it into nothing
+      and several KB of meaning would simply disappear, with no error and no log;
+    * upstream rewrote the description our override summarizes, so the override
+      now describes a tool that may have changed underneath it.
+
+    In both cases the tool passes through exactly as upstream sent it. That costs
+    bytes and keeps the catalog honest, which is the right way round: the whole
+    claim of this proxy is that nothing meaningful is lost.
+    """
+    present = {tool["name"] for tool in tools}
+    allowed = set()
+    for tool in tools:
+        name = tool["name"]
+        if name not in APPENDIX_TARGETS:
+            continue
+        target = APPENDIX_TARGETS[name]
+        if target not in present:
+            log.warning(
+                "compaction skipped for %s: appendix target %s is not in this catalog", name, target
+            )
+            continue
+        expected = SOURCE_DIGESTS.get(name)
+        actual = description_digest(tool.get("description", ""))
+        if expected is not None and expected != actual:
+            log.warning(
+                "compaction skipped for %s: upstream description changed (%s != %s)",
+                name,
+                actual,
+                expected,
+            )
+            continue
+        allowed.add(name)
+    return allowed
+
+
 # Enough to say what the field is; the sentence that says how it behaves moves to
 # the instructions tool. Cut on a word boundary — a hint truncated mid-word reads
 # as corruption and invites the agent to guess at the rest.
@@ -121,11 +185,15 @@ def _shorten(text: str, limit: int = SCHEMA_HINT_CHARS) -> str:
 
 
 def trim_schema_prose(
-    tools: list[dict[str, Any]],
+    tools: list[dict[str, Any]], allowed: set[str] | None = None
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
     """Shorten `properties[].description` on the tools listed in
     `APPENDIX_TARGETS`, returning `(tools, removed)` where `removed` maps
     tool -> field -> the full original sentence.
+
+    `allowed` narrows that to the tools this catalog can still absorb the prose
+    for (see `compactable`); omitted, every appendix target is trimmed, which is
+    what the schema-level tests want to exercise.
 
     Only prose moves. Types, enums, `required` and field names are untouched.
     """
@@ -133,6 +201,8 @@ def trim_schema_prose(
     removed: dict[str, dict[str, str]] = {}
     for tool in tools:
         if tool["name"] not in APPENDIX_TARGETS:
+            continue
+        if allowed is not None and tool["name"] not in allowed:
             continue
         properties = (tool.get("inputSchema") or {}).get("properties") or {}
         for name, field in properties.items():
@@ -159,16 +229,20 @@ def apply_compact_overrides(
     tool's `description` (including instructions tools) are left untouched.
     `trimmed_originals` holds the pre-trim description of each overridden tool, keyed
     by its name — feed it to `apply_result_appendix` so the removed prose still
-    reaches the agent when it actually calls the matching instructions tool."""
+    reaches the agent when it actually calls the matching instructions tool.
+
+    A tool `compactable` rules out passes through byte-identical to upstream: the
+    proxy gets bigger, and nothing the agent needs goes missing."""
     tools = deepcopy(tools)
+    allowed = compactable(tools)
     trimmed_originals: dict[str, str] = {}
     for tool in tools:
         override = COMPACT_DESCRIPTIONS.get(tool["name"])
-        if override is not None:
+        if override is not None and tool["name"] in allowed:
             trimmed_originals[tool["name"]] = tool["description"]
             tool["description"] = override
 
-    tools, schema_prose = trim_schema_prose(tools)
+    tools, schema_prose = trim_schema_prose(tools, allowed)
     for name, fields in schema_prose.items():
         block = "\n".join(f"- `{field}` — {text}" for field, text in fields.items())
         existing = trimmed_originals.get(name, "")
