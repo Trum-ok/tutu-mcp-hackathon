@@ -156,6 +156,13 @@ async def run_evals(opts: EvalOptions) -> int:
         print("--record-missing требует --live", file=sys.stderr)
         return 2
 
+    # `run_eval` builds a semaphore out of this. `Semaphore(0)` does not fail — it
+    # simply never lets a scenario through, so the run hangs with a printed plan
+    # and no output, which reads as a broken harness rather than a bad flag.
+    if opts.concurrency < 1:
+        print(f"--concurrency должен быть ≥ 1, получено {opts.concurrency}", file=sys.stderr)
+        return 2
+
     model = opts.model or openai_model_default()
     # --effort wins over OPENAI_EFFORT, which wins over the model's own default —
     # the same precedence --model has over OPENAI_MODEL.

@@ -1,13 +1,16 @@
-"""Bad `--scenarios` / `--domains` / `--variants` values fail loudly.
+"""Bad `--scenarios` / `--domains` / `--variants` / `--concurrency` values fail loudly.
 
-Two of them used to raise `KeyError` (a traceback in the user's face) and the
+Two of them used to raise `KeyError` (a traceback in the user's face), the
 third — an unknown domain — filtered every scenario out and exited 0, which is
-indistinguishable from a run where everything passed.
+indistinguishable from a run where everything passed, and `--concurrency 0`
+hung the run instead of failing at all.
 """
 
 import pytest
 
-from evals.options import SelectionError, check_variants
+from evals.options import EvalOptions, SelectionError, check_variants
+from evals.run import run_evals
+from evals.runner import run_eval
 from evals.scenarios import DOMAINS, SCENARIOS_BY_ID, select
 
 
@@ -43,3 +46,17 @@ def test_unknown_variant_is_rejected_before_any_backend_work():
         check_variants(["baseline", "foo"])
 
     assert check_variants(["baseline", "proxy"]) is None
+
+
+async def test_zero_concurrency_is_rejected_instead_of_hanging_the_run(capsys):
+    """`asyncio.Semaphore(0)` admits nobody, so the run would sit forever after
+    printing its plan — the failure mode hardest to tell from a broken harness."""
+    code = await run_evals(EvalOptions(concurrency=0))
+
+    assert code == 2
+    assert "--concurrency" in capsys.readouterr().err
+
+
+async def test_the_runner_refuses_it_too_for_a_caller_that_bypasses_the_cli():
+    with pytest.raises(ValueError, match="concurrency"):
+        await run_eval(agent=None, scenarios=[], variants=[], token_counter=None, concurrency=0)

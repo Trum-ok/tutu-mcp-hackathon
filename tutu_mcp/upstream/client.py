@@ -12,6 +12,29 @@ from mcp.shared.exceptions import MCPError
 from tutu_mcp.backend import BackendTimeoutError, BackendUnavailableError, ToolCallResult
 
 
+def _leaves(exc: BaseException) -> list[BaseException]:
+    """An `ExceptionGroup` flattened to the failures it really carries.
+
+    The MCP client runs its transport inside anyio task groups, so a refused
+    connection or an elapsed timeout arrives wrapped: `isinstance` sees a group
+    rather than the `TimeoutError` in it, and `str()` of that group says
+    "unhandled errors in a TaskGroup (1 sub-exception)" — which is what the
+    proxy then reported to the user in place of the actual cause.
+    """
+    if isinstance(exc, BaseExceptionGroup):
+        return [leaf for sub in exc.exceptions for leaf in _leaves(sub)]
+    return [exc]
+
+
+def _describe(exc: BaseException) -> str:
+    leaves = _leaves(exc)
+    if leaves == [exc]:
+        return str(exc) or type(exc).__name__
+    # Types included: a wrapped `ConnectionRefusedError` usually carries an empty
+    # message, so the class name is the only thing that says what happened.
+    return "; ".join(f"{type(leaf).__name__}: {leaf}".rstrip(": ") for leaf in leaves)
+
+
 def _translate(exc: Exception) -> Exception:
     """Turns whatever the MCP client raises into a `BackendError`, at the one
     place that knows this backend's failure shapes.
@@ -22,12 +45,15 @@ def _translate(exc: Exception) -> Exception:
     once armed — which is the shape `read_timeout_seconds` actually elapsing
     takes. Missing the second one would leave the whole point of configuring
     a timeout unreachable: it would always classify as a generic failure.
+    Either shape also arrives wrapped in a group (see `_leaves`), so both are
+    looked for among the leaves rather than on the exception itself.
     """
-    if isinstance(exc, TimeoutError):
-        return BackendTimeoutError(str(exc))
-    if isinstance(exc, MCPError) and exc.code == types.REQUEST_TIMEOUT:
-        return BackendTimeoutError(str(exc))
-    return BackendUnavailableError(str(exc))
+    for leaf in _leaves(exc):
+        if isinstance(leaf, TimeoutError):
+            return BackendTimeoutError(_describe(exc))
+        if isinstance(leaf, MCPError) and leaf.code == types.REQUEST_TIMEOUT:
+            return BackendTimeoutError(_describe(exc))
+    return BackendUnavailableError(_describe(exc))
 
 
 class UpstreamClient:
@@ -48,8 +74,22 @@ class UpstreamClient:
         self._reconnect_lock = anyio.Lock()
 
     async def connect(self) -> None:
-        self._client = MCPClient(self._url, read_timeout_seconds=self._timeout_s)
-        await self._client.__aenter__()
+        """The handshake is a failure branch like any call, and it is translated
+        like one: an upstream that is down, a wrong URL or a proxy in the way
+        would otherwise escape as the transport's own exception, past the whole
+        `BackendError` classification — a traceback out of `serve` instead of a
+        line saying upstream is unreachable.
+
+        `self._client` is only published once the handshake is through, so a
+        failed one leaves the instance disconnected rather than holding a client
+        that never initialized.
+        """
+        client = MCPClient(self._url, read_timeout_seconds=self._timeout_s)
+        try:
+            await client.__aenter__()
+        except Exception as exc:
+            raise _translate(exc) from exc
+        self._client = client
 
     async def aclose(self) -> None:
         if self._client is not None:

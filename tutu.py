@@ -49,9 +49,12 @@ def _split(value: str | None) -> tuple[str, ...] | None:
 @app.command()
 def serve() -> None:
     """Run the proxy. TUTU_PROXY_MODE=mock (default) serves fixtures; live proxies Tutu."""
-    from tutu_mcp.main import serve as _serve
+    # `tutu_mcp.main.main` and not the coroutine it runs: the container starts the
+    # proxy through that same function, and its startup-failure handling has to be
+    # the one this command gets too, not a second copy that drifts from it.
+    from tutu_mcp.main import main as _serve
 
-    anyio.run(_serve)
+    _serve()
 
 
 @app.command()
@@ -79,7 +82,7 @@ def evals(
     variants: str = typer.Option("baseline,proxy", help="tool surfaces to compare"),
     scenarios: str | None = typer.Option(None, help="scenario ids to run"),
     domains: str | None = typer.Option(None, help="restrict to these domains"),
-    concurrency: int = 1,
+    concurrency: int = typer.Option(1, min=1, help="scenarios in flight at once"),
     out: Path = Path("out/eval-results.json"),
     estimate_tokens: bool = typer.Option(
         False,
@@ -164,5 +167,27 @@ def measure() -> None:
     raise typer.Exit(print_report())
 
 
+def main() -> None:
+    """Turns a bad `TUTU_*` value into a message and exit code 2 for every command.
+
+    `serve` reports its own startup failures (`tutu_mcp.main`, shared with the
+    container entrypoint); the rest — `evals`, `record`, `measure` — read the
+    same settings and had nothing catching them, so `.env` with a typo in it
+    answered with a traceback. Both imports are stdlib plus dotenv, so the lazy
+    imports the commands rely on (see the module docstring) stay lazy.
+    """
+    from tutu_mcp.backend import BackendError
+    from tutu_mcp.config import SettingsError
+
+    try:
+        app()
+    except SettingsError as exc:
+        print(exc, file=sys.stderr)
+        raise SystemExit(2) from None
+    except BackendError as exc:
+        print(f"Upstream недоступен: {type(exc).__name__}: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+
+
 if __name__ == "__main__":
-    app()
+    main()

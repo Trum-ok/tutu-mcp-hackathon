@@ -56,6 +56,42 @@ async def test_connect_defaults_to_no_timeout(monkeypatch):
     assert _FakeMCPClient.last_kwargs == {"read_timeout_seconds": None}
 
 
+class _UnreachableMCPClient(_FakeMCPClient):
+    """Fails the handshake itself, the way a downed upstream or a wrong URL does."""
+
+    def __init__(self, url, exc: Exception, **kwargs):
+        super().__init__(url, **kwargs)
+        self._exc = exc
+
+    async def __aenter__(self):
+        raise self._exc
+
+
+@pytest.mark.parametrize(
+    "exc, expected",
+    [
+        (ConnectionError("connection refused"), BackendUnavailableError),
+        (TimeoutError(), BackendTimeoutError),
+    ],
+)
+async def test_a_failed_handshake_is_translated_like_any_other_failure(monkeypatch, exc, expected):
+    """`connect` used to let the transport's exception straight out — a traceback
+    from `serve` and from `evals --live` instead of the classified failure every
+    other call already produced."""
+    monkeypatch.setattr(
+        upstream_pkg.client,
+        "MCPClient",
+        lambda url, **kw: _UnreachableMCPClient(url, exc, **kw),
+    )
+
+    client = UpstreamClient("https://example.invalid/mcp")
+    with pytest.raises(expected):
+        await client.connect()
+
+    # nothing half-open left behind: `aclose` has no client to close
+    assert await client.aclose() is None
+
+
 class _RaisingMCPClient(_FakeMCPClient):
     """Raises a fixed exception from every `call_tool`/`list_tools`, to
     exercise `UpstreamClient`'s translation into `BackendError`."""
@@ -113,6 +149,41 @@ async def test_other_failures_translate_to_backend_unavailable(monkeypatch):
     async with UpstreamClient("https://example.invalid/mcp") as client:
         with pytest.raises(BackendUnavailableError):
             await client.call_tool("search_rail", {})
+
+
+async def test_a_timeout_wrapped_in_a_task_group_is_still_a_timeout(monkeypatch):
+    """The client's transport runs in anyio task groups, so the real failure
+    arrives inside an `ExceptionGroup` — read off the group itself, every
+    timeout would classify as a generic `upstream_unavailable` and lose its
+    retry (`call_with_timeout_retry`)."""
+    wrapped = ExceptionGroup("unhandled errors in a TaskGroup", [TimeoutError()])
+    monkeypatch.setattr(
+        upstream_pkg.client,
+        "MCPClient",
+        lambda url, **kw: _RaisingMCPClient(url, wrapped, **kw),
+    )
+
+    async with UpstreamClient("https://example.invalid/mcp") as client:
+        with pytest.raises(BackendTimeoutError):
+            await client.call_tool("search_rail", {})
+
+
+async def test_the_reported_message_names_the_wrapped_cause(monkeypatch):
+    """`str()` of a group says only "unhandled errors in a TaskGroup", which is
+    what the proxy used to hand the user in place of the actual failure."""
+    wrapped = ExceptionGroup("unhandled errors in a TaskGroup", [ConnectionRefusedError()])
+    monkeypatch.setattr(
+        upstream_pkg.client,
+        "MCPClient",
+        lambda url, **kw: _RaisingMCPClient(url, wrapped, **kw),
+    )
+
+    async with UpstreamClient("https://example.invalid/mcp") as client:
+        with pytest.raises(BackendUnavailableError) as excinfo:
+            await client.call_tool("search_rail", {})
+
+    assert "ConnectionRefusedError" in str(excinfo.value)
+    assert "TaskGroup" not in str(excinfo.value)
 
 
 async def test_a_connection_failure_reconnects_once_and_the_retry_succeeds(monkeypatch):
