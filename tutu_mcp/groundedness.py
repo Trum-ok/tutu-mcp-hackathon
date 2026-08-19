@@ -27,12 +27,12 @@ cut, not an oversight.
 import json
 import re
 from dataclasses import dataclass, field
-from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from tutu_mcp.backend import ERROR_STATUSES
+from tutu_mcp.text import word_bounded
 from tutu_mcp.toolspec import parse_args, tool_spec
 
 # Our own domain-shaped error results (tutu_mcp.proxy.dispatch.backend_error).
@@ -163,11 +163,6 @@ def extract_claims(answer_text: str) -> list[Claim]:
     return claims
 
 
-@lru_cache(maxsize=512)
-def _WORD_BOUNDED(value: str) -> re.Pattern[str]:  # noqa: N802 - reads as a constructor
-    return re.compile(rf"(?<!\w){re.escape(value)}(?!\w)", re.IGNORECASE)
-
-
 _PRICE_KEY_HINTS = ("price", "amount")
 
 
@@ -259,7 +254,7 @@ def _stated_by_user(claim: Claim, user_request: str) -> bool:
     """
     if not user_request:
         return False
-    return any(_WORD_BOUNDED(form).search(user_request) for form in _claim_spellings(claim) if form)
+    return any(word_bounded(form).search(user_request) for form in _claim_spellings(claim) if form)
 
 
 def check_groundedness(

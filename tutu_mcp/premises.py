@@ -36,11 +36,11 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from functools import lru_cache
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from tutu_mcp.text import word_bounded
 from tutu_mcp.toolspec import parse_args, tool_spec
 
 Status = Literal["confirmed", "assumed", "unavailable", "conflicted"]
@@ -505,11 +505,6 @@ class GateDecision:
         )
 
 
-@lru_cache(maxsize=512)
-def _WORD_BOUNDED(value: str) -> re.Pattern[str]:  # noqa: N802 - reads as a constructor
-    return re.compile(rf"(?<!\w){re.escape(value)}(?!\w)", re.IGNORECASE)
-
-
 def _norm_scalar(value: Any) -> str:
     if isinstance(value, bool):
         return str(value).lower()
@@ -597,7 +592,7 @@ class SessionPremises:
         """
         if not value:
             return False
-        return _WORD_BOUNDED(value).search(self.user_request) is not None
+        return word_bounded(value).search(self.user_request) is not None
 
     def _has_source(self, values: list[str]) -> bool:
         return all(v in self.seen_values or self._said_by_user(v) for v in values)
