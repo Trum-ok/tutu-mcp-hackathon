@@ -28,8 +28,8 @@ from evals.scenarios import select
 from evals.tokens import OfflineTokenCounter
 from evals.transcript import Transcript
 from evals.variants import BASELINE, PROXY, build_variants
+from tutu_mcp.backends import backend_for
 from tutu_mcp.config import load_settings
-from tutu_mcp.replay.mock_client import MockUpstreamClient
 from tutu_mcp.replay.store import FixtureStore
 
 RAIL_ARGS = {
@@ -165,19 +165,22 @@ def build_plans(store: FixtureStore) -> dict[tuple[str, str], Plan]:
 async def run_demo() -> int:
     settings = load_settings()
     store = FixtureStore(settings.fixtures_dir)
-    backend = MockUpstreamClient(store)
 
     scenario_ids = ["rail_cheapest", "rail_missing_train_number", "hotels_missing_field"]
     scenarios = select(ids=scenario_ids)
     agent = DemoAgent(plans=build_plans(store))
-    variants = await build_variants(backend, store.instructions())
 
-    run = await run_eval(
-        agent=agent,
-        scenarios=scenarios,
-        variants=variants,
-        token_counter=OfflineTokenCounter(),
-    )
+    # Hard-wired to the mock: these traces exist to be reproducible on a laptop
+    # with no key and no network, so `TUTU_PROXY_MODE=live` must not reach them.
+    async with backend_for(settings, live=False) as wiring:
+        variants = await build_variants(wiring.backend, wiring.instructions())
+
+        run = await run_eval(
+            agent=agent,
+            scenarios=scenarios,
+            variants=variants,
+            token_counter=OfflineTokenCounter(),
+        )
 
     # Deliberately NOT out/eval-results.json: that path belongs to real runs, and two
     # people generating different things into one file overwrite each other's work.

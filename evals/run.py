@@ -35,11 +35,9 @@ from evals.tokens import (
     TokenCounter,
 )
 from evals.variants import build_variants
+from tutu_mcp.backends import backend_for
 from tutu_mcp.config import load_settings
-from tutu_mcp.replay.mock_client import MockUpstreamClient
 from tutu_mcp.replay.recording import RecordingBackend
-from tutu_mcp.replay.store import FixtureStore
-from tutu_mcp.upstream.client import UpstreamClient
 
 
 def build_agent(opts: EvalOptions, model: str, effort: Effort | None) -> Agent:
@@ -85,7 +83,6 @@ def progress(result: ScenarioResult) -> None:
 
 async def run_evals(opts: EvalOptions) -> int:
     settings = load_settings()
-    store = FixtureStore(settings.fixtures_dir)
     credentials = openai_credentials_source()
 
     # Both checks run before anything is built or connected: a typo in a flag
@@ -132,18 +129,9 @@ async def run_evals(opts: EvalOptions) -> int:
         f"агент: {agent.label}, endpoint: /v1/{opts.api.value}"
     )
 
-    upstream: UpstreamClient | None = None
-    try:
-        if opts.live:
-            upstream = UpstreamClient(settings.upstream_url, timeout_s=settings.upstream_timeout_s)
-            await upstream.connect()
-            instructions = upstream.server_info()["instructions"]
-            backend = RecordingBackend(store, upstream) if opts.record_missing else upstream
-        else:
-            backend = MockUpstreamClient(store)
-            instructions = store.instructions()
-
-        variants = await build_variants(backend, instructions, names=list(opts.variants))
+    async with backend_for(settings, live=opts.live, record_missing=opts.record_missing) as wiring:
+        backend = wiring.backend
+        variants = await build_variants(backend, wiring.instructions(), names=list(opts.variants))
         run = await run_eval(
             agent=agent,
             scenarios=scenarios,
@@ -153,9 +141,6 @@ async def run_evals(opts: EvalOptions) -> int:
             on_result=progress,
             api=opts.api.value,
         )
-    finally:
-        if upstream is not None:
-            await upstream.aclose()
 
     print(report_mod.render_console(run))
 

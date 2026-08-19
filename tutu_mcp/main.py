@@ -7,30 +7,20 @@ mcp.tutu.ru and is subject to its shared rate limit; use sparingly.
 
 import anyio
 
-from tutu_mcp.backend import ToolBackend
+from tutu_mcp.backends import backend_for
 from tutu_mcp.config import load_settings
 from tutu_mcp.proxy.server import build_server
-from tutu_mcp.replay.mock_client import MockUpstreamClient
-from tutu_mcp.replay.store import FixtureStore
-from tutu_mcp.upstream.client import UpstreamClient
 
 
 async def serve() -> None:
     settings = load_settings()
+    live = settings.mode == "live"
+    name = "tutu-mcp-proxy" if live else "tutu-mcp-proxy-mock"
+    source = f"upstream={settings.upstream_url}" if live else f"fixtures={settings.fixtures_dir}"
 
-    if settings.mode == "mock":
-        backend: ToolBackend = MockUpstreamClient(FixtureStore(settings.fixtures_dir))
-        server = build_server(backend, name="tutu-mcp-proxy-mock")
-        print(f"[tutu-mcp-proxy] mock mode — fixtures={settings.fixtures_dir}")
-        print(f"[tutu-mcp-proxy] listening on http://{settings.host}:{settings.port}/mcp")
-        await server.run_streamable_http_async(host=settings.host, port=settings.port)
-        return
-
-    async with UpstreamClient(
-        settings.upstream_url, timeout_s=settings.upstream_timeout_s
-    ) as backend:
-        server = build_server(backend, name="tutu-mcp-proxy")
-        print(f"[tutu-mcp-proxy] live mode — upstream={settings.upstream_url}")
+    async with backend_for(settings, live=live) as wiring:
+        server = build_server(wiring.backend, name=name)
+        print(f"[tutu-mcp-proxy] {settings.mode} mode — {source}")
         print(f"[tutu-mcp-proxy] listening on http://{settings.host}:{settings.port}/mcp")
         await server.run_streamable_http_async(host=settings.host, port=settings.port)
 
