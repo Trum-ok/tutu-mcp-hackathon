@@ -1,0 +1,9 @@
+{
+  "tool": "create_checkout_link",
+  "scenario": "auto_bf21a9e8",
+  "arguments": {},
+  "result": {
+    "text": "Error executing tool create_checkout_link: create_checkout_link requires product_type or transport",
+    "is_error": true
+  }
+}

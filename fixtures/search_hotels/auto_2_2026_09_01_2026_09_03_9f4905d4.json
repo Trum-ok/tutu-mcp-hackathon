@@ -1,0 +1,30 @@
+{
+  "tool": "search_hotels",
+  "scenario": "auto_2_2026_09_01_2026_09_03_9f4905d4",
+  "arguments": {
+    "check_in": "2026-09-01",
+    "check_out": "2026-09-03",
+    "checkin_date": null,
+    "checkout_date": null,
+    "city_name": null,
+    "geo_id": "2656915",
+    "adults": 2,
+    "children_ages": [],
+    "page": 8,
+    "page_size": 30,
+    "stars": null,
+    "price_max": null,
+    "meals": null,
+    "hotel_types": null,
+    "min_rating": null,
+    "free_cancellation": null,
+    "breakfast_included": null,
+    "hotel_amenities": null,
+    "room_amenities": null,
+    "view": "compact"
+  },
+  "result": {
+    "text": "{\"hotels\":[],\"stay\":{\"check_in\":\"2026-09-01\",\"check_out\":\"2026-09-03\",\"nights\":2},\"meta\":{\"checkout_hint\":\"When the user picks a hotel — in any wording («беру», «первый», «оформи», «забронируй») — call `create_checkout_link` with that hotel's `checkout_ref` and put the returned link in your reply. `best_offer.checkout_url` is the plain-page fallback, not the deeplink.\",\"search_id\":\"63e15e94a675e11feda7176341deca47\",\"page\":8,\"page_size\":30,\"total_returned\":0,\"has_more\":false,\"geo_id\":\"2656915\",\"resolved_geo\":null,\"filters_applied\":{\"option_filters\":[],\"range_filters\":[],\"button_filters\":[],\"quick_filters_order\":[],\"changes\":[]},\"post_filter_dropped_over_cap\":0,\"post_filter_dropped_no_free_cancellation\":0,\"post_filter_dropped_no_breakfast\":0}}",
+    "is_error": false
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "tool": "create_checkout_link",
+  "scenario": "auto_2657260_2958868_2006004_ebc7b232",
+  "arguments": {
+    "product_type": "rail",
+    "transport": "railway",
+    "departure_city_id": 2656915,
+    "arrival_city_id": 2657260,
+    "departure_station_code": "2004001",
+    "arrival_station_code": "2006004",
+    "train_number": "749У",
+    "departure_at": "2026-08-25T22:15:00+03:00",
+    "departure_geo_point_id": 2958266,
+    "arrival_geo_point_id": 2958868,
+    "search_id": "3A4EB36C-8BE2-49D2-99F2-7BFDC80F17EA",
+    "result_id": "a050f81a-e946-519a-93e3-29194d8d5441",
+    "card_id": "0e542808b933512495228667b4d1e8149",
+    "offer_hash": "5488341abfebd58732ee5b12a5f69bfb",
+    "segment_hash": "dd79e7fa8c19fcb47159ec86dbcb1eb8"
+  },
+  "result": {
+    "text": "{\"kind\":\"deeplink\",\"checkout_url\":\"https://mtp-deeplink.tutu.ru/api/v1/deeplink/explicit/train?geo_mode=unified&departure_time=2026-08-25T22:15:00%2B03:00&departure_geo_point_id=2958266&arrival_geo_point_id=2958868&first_leg_route_number=749%D0%A3&fallback_to_vid=true&source=mcp&departure_geo_city_id=2656915&arrival_geo_city_id=2657260\",\"purchase_url_note\":\"checkout_url is a Tutu deeplink that opens this train's seat-selection page; if the offer is gone it falls back to search. To mint the cart with exact seats instead, call again with the seat choice from `get_rail_seatmap` (`car_number` + `seat_numbers`) after the user confirms seats.\",\"agent_hint\":\"Show this `checkout_url` to the user in the SAME reply, verbatim — even when you also offer passenger registration as the next step. An answer without the link is a failed hand-off.\"}",
+    "is_error": false
+  }
+}
