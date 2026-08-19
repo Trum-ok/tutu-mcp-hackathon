@@ -11,6 +11,24 @@ from typing import Any, Protocol
 
 @dataclass(frozen=True)
 class ToolCallResult:
+    """One `tools/call` answer, reduced to the two fields this proxy acts on.
+
+    A lossy view of `CallToolResult` on purpose, and the loss has to be stated
+    because it is silent: `structuredContent` and every non-text content block
+    (image / audio / embedded resource) are dropped by
+    `UpstreamClient.call_tool`, which joins the text blocks and keeps nothing
+    else. Today that costs nothing — Tutu answers every tool with a single JSON
+    text block, which is also what `premises` and `groundedness` parse and what
+    `FixtureStore` round-trips through `asdict()` — but the day upstream starts
+    returning `structuredContent`, the proxy would forward an answer with a hole
+    in it and no error anywhere to show for it.
+
+    Adding a field here is only half the change: recorded fixtures carry exactly
+    these keys (`ToolCallResult(**entry["result"])`), so every fixture predating
+    the new field still loads, and both the server and `evals/variants.py` have
+    to be taught to put it back on the wire.
+    """
+
     text: str
     is_error: bool
 
@@ -21,7 +39,8 @@ class ToolBackend(Protocol):
         ...
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> ToolCallResult:
-        """Call `name` with `arguments`, returning its single text content block."""
+        """Call `name` with `arguments`, returning its text content — everything
+        else the answer carried is dropped here, see `ToolCallResult`."""
         ...
 
 
